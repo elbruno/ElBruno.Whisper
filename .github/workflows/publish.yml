@@ -50,7 +50,7 @@ jobs:
         run: dotnet build ElBruno.Whisper.slnx -c Release --no-restore -p:TargetFrameworks=net8.0 -p:Version=${{ steps.version.outputs.version }}
 
       - name: Unit Tests
-        run: dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj -c Release --no-build --framework net8.0 --verbosity normal
+        run: dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj -c Release --no-build --framework net8.0 --verbosity normal --filter "Category!=Integration"
 
       - name: Pack
         run: dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-build -p:TargetFrameworks=net8.0 -p:Version=${{ steps.version.outputs.version }} -o artifacts

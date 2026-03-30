@@ -189,16 +189,21 @@ internal sealed class WhisperInferenceSession : IDisposable
             }
             else
             {
-                // Empty cache: create zero tensor with dynamic dims resolved (batch=1, seq=0)
+                // Empty cache: create zero tensor with dynamic dims resolved to 1
+                // Using 1 (not 0) for all dynamic dims avoids ONNX Reshape failures
                 var shape = (int[])slot.MetadataShape.Clone();
                 for (int d = 0; d < shape.Length; d++)
                 {
                     if (shape[d] < 0)
-                        shape[d] = d == 0 ? 1 : 0;
+                        shape[d] = 1;
                 }
 
+                var totalElements = 1;
+                foreach (var dim in shape)
+                    totalElements *= dim;
+
                 inputs.Add(NamedOnnxValue.CreateFromTensor(slot.InputName,
-                    new DenseTensor<float>(Array.Empty<float>(), shape)));
+                    new DenseTensor<float>(new float[totalElements], shape)));
             }
         }
     }
