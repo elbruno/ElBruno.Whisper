@@ -7,5 +7,6 @@
   </Folder>
   <Folder Name="/src/samples/">
     <Project Path="src\samples\HelloWhisper\HelloWhisper.csproj" />
+    <Project Path="src\samples\BlazorWhisper\BlazorWhisper.csproj" />
   </Folder>
 </Solution>

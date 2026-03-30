@@ -1,0 +1,23 @@
+@inherits LayoutComponentBase
+
+<div class="d-flex flex-column min-vh-100">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+                <i class="bi bi-soundwave text-primary"></i>
+                <span class="fw-bold">Blazor Whisper</span>
+            </a>
+            <NavMenu />
+        </div>
+    </nav>
+
+    <main class="flex-grow-1">
+        <div class="container py-4">
+            @Body
+        </div>
+    </main>
+
+    <footer class="bg-dark text-secondary text-center py-3 border-top border-secondary">
+        <small>Powered by <strong>ElBruno.Whisper</strong> &mdash; Local speech-to-text with ONNX Runtime</small>
+    </footer>
+</div>

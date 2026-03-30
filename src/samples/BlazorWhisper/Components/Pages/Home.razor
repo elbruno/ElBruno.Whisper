@@ -1,0 +1,67 @@
+@page "/"
+
+<div class="text-center py-5">
+    <h1 class="display-4 fw-bold mb-3">
+        <i class="bi bi-soundwave text-primary"></i> Blazor Whisper
+    </h1>
+    <p class="lead text-secondary mb-5">
+        Local speech-to-text powered by <strong>ElBruno.Whisper</strong> and ONNX Runtime.<br />
+        No cloud APIs. Everything runs on your machine.
+    </p>
+
+    <div class="row g-4 justify-content-center">
+        <div class="col-md-4">
+            <div class="card bg-dark text-light border-secondary h-100 shadow-sm hover-card">
+                <div class="card-body d-flex flex-column text-center p-4">
+                    <div class="display-3 text-info mb-3">
+                        <i class="bi bi-file-earmark-music"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">File Upload</h5>
+                    <p class="card-text text-secondary flex-grow-1">
+                        Upload a WAV file and transcribe it using a Whisper model of your choice.
+                    </p>
+                    <a href="file-transcribe" class="btn btn-outline-info mt-3">
+                        <i class="bi bi-upload me-1"></i> Get Started
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card bg-dark text-light border-secondary h-100 shadow-sm hover-card">
+                <div class="card-body d-flex flex-column text-center p-4">
+                    <div class="display-3 text-success mb-3">
+                        <i class="bi bi-mic"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Record &amp; Transcribe</h5>
+                    <p class="card-text text-secondary flex-grow-1">
+                        Record audio from your microphone, then transcribe the recording in one go.
+                    </p>
+                    <a href="record-transcribe" class="btn btn-outline-success mt-3">
+                        <i class="bi bi-mic me-1"></i> Record Audio
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card bg-dark text-light border-primary h-100 shadow hover-card hero-card">
+                <div class="card-body d-flex flex-column text-center p-4">
+                    <div class="display-3 text-warning mb-3">
+                        <i class="bi bi-broadcast"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">
+                        Real-Time Transcription
+                        <span class="badge bg-warning text-dark ms-2 fs-6">★</span>
+                    </h5>
+                    <p class="card-text text-secondary flex-grow-1">
+                        Speak and see your words appear in real time. Audio is transcribed in 5-second chunks as you talk.
+                    </p>
+                    <a href="realtime-transcribe" class="btn btn-warning text-dark mt-3">
+                        <i class="bi bi-broadcast me-1"></i> Try Real-Time
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

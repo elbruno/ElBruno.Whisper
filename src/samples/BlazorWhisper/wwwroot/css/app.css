@@ -1,0 +1,168 @@
+/* Blazor Whisper - Application Styles */
+
+:root {
+    --bg-primary: #1a1d23;
+    --bg-card: #21252b;
+    --border-subtle: #343a40;
+    --text-muted: #868e96;
+    --accent-warning: #ffc107;
+}
+
+html, body {
+    background-color: var(--bg-primary);
+    color: #e9ecef;
+}
+
+.card.bg-dark {
+    background-color: var(--bg-card) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.hero-card {
+    border-color: var(--accent-warning) !important;
+    box-shadow: 0 0 20px rgba(255, 193, 7, 0.15);
+}
+
+.hero-card:hover {
+    box-shadow: 0 8px 30px rgba(255, 193, 7, 0.25);
+}
+
+/* Transcript display */
+.transcript-box {
+    background-color: #181b20;
+    border: 1px solid var(--border-subtle);
+    font-size: 1.05rem;
+    line-height: 1.7;
+    min-height: 80px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Recording indicator */
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.recording-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: #dc3545;
+    animation: pulse 1s ease-in-out infinite;
+    display: inline-block;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.4;
+        transform: scale(1.3);
+    }
+}
+
+/* Real-time indicator */
+.realtime-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.realtime-pulse {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: var(--accent-warning);
+    animation: realtimePulse 1.2s ease-in-out infinite;
+    box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+}
+
+@keyframes realtimePulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+        box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1.4);
+        box-shadow: 0 0 20px rgba(255, 193, 7, 0.8);
+    }
+}
+
+/* Real-time transcript container */
+.realtime-transcript-container {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.realtime-transcript-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.realtime-transcript-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.realtime-transcript-container::-webkit-scrollbar-thumb {
+    background-color: var(--border-subtle);
+    border-radius: 3px;
+}
+
+.transcript-chunk {
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid var(--border-subtle);
+    transition: border-color 0.3s ease;
+}
+
+.transcript-chunk:last-child {
+    border-left-color: var(--accent-warning);
+}
+
+.chunk-processing {
+    border-left-color: var(--accent-warning);
+    animation: chunkFade 0.8s ease-in-out infinite;
+}
+
+@keyframes chunkFade {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Form controls in dark theme */
+.form-select.bg-dark:focus,
+.form-control.bg-dark:focus {
+    border-color: #495057;
+    box-shadow: 0 0 0 0.2rem rgba(108, 117, 125, 0.25);
+}
+
+/* Progress bar smoothing */
+.progress-bar {
+    transition: width 0.3s ease;
+}
+
+/* Button sizing consistency */
+.btn-lg {
+    padding: 0.75rem 2rem;
+}
+
+/* Footer */
+footer {
+    font-size: 0.85rem;
+}
+
+/* Navbar active styling */
+.nav-link.active {
+    color: #fff !important;
+    font-weight: 600;
+}

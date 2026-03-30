@@ -1,0 +1,342 @@
+@page "/realtime-transcribe"
+@using ElBruno.HuggingFace
+@using ElBruno.Whisper
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<h2 class="mb-4">
+    <i class="bi bi-broadcast text-warning me-2"></i>Real-Time Transcription
+    <span class="badge bg-warning text-dark ms-2 fs-6">★ Hero Feature</span>
+</h2>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card bg-dark text-light border-secondary">
+            <div class="card-header border-secondary">
+                <i class="bi bi-gear me-1"></i> Settings
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Whisper Model</label>
+                    <select class="form-select bg-dark text-light border-secondary" @bind="selectedModelId"
+                            disabled="@(isStreaming || isLoadingModel)">
+                        @foreach (var model in KnownWhisperModels.All)
+                        {
+                            <option value="@model.Id">@model.DisplayName (@model.Size)</option>
+                        }
+                    </select>
+                    <small class="text-secondary">Smaller models = faster transcription. Recommend Tiny or Base for real-time.</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Chunk Interval</label>
+                    <select class="form-select bg-dark text-light border-secondary" @bind="chunkIntervalMs"
+                            disabled="@(isStreaming || isLoadingModel)">
+                        <option value="3000">3 seconds</option>
+                        <option value="5000">5 seconds</option>
+                        <option value="8000">8 seconds</option>
+                        <option value="10000">10 seconds</option>
+                    </select>
+                </div>
+
+                <div class="text-center py-3">
+                    @if (isLoadingModel)
+                    {
+                        <div class="mb-3">
+                            <span class="spinner-border text-warning me-2"></span>
+                            <span class="fw-bold">@progressMessage</span>
+                        </div>
+                        @if (downloadPercent > 0)
+                        {
+                            <div class="progress" style="height: 6px;">
+                                <div class="progress-bar bg-warning" style="width: @downloadPercent%"></div>
+                            </div>
+                        }
+                    }
+                    else if (isStreaming)
+                    {
+                        <div class="realtime-indicator mb-3">
+                            <div class="realtime-pulse"></div>
+                            <span class="ms-3 fw-bold text-warning">LIVE &mdash; Transcribing</span>
+                        </div>
+                        <p class="text-secondary">
+                            <i class="bi bi-clock me-1"></i> @elapsedTime.ToString(@"mm\:ss")
+                            &nbsp;|&nbsp;
+                            <i class="bi bi-collection me-1"></i> @transcriptionChunks.Count chunks
+                        </p>
+                        <button class="btn btn-danger btn-lg" @onclick="StopRealtime">
+                            <i class="bi bi-stop-fill me-1"></i> Stop Transcription
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-warning btn-lg text-dark" @onclick="StartRealtime">
+                            <i class="bi bi-broadcast me-1"></i> Start Real-Time Transcription
+                        </button>
+                    }
+                </div>
+
+                @if (errorMessage is not null)
+                {
+                    <div class="alert alert-danger mt-3">
+                        <i class="bi bi-exclamation-triangle me-1"></i> @errorMessage
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card bg-dark text-light border-warning h-100">
+            <div class="card-header border-warning d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-card-text me-1"></i> Live Transcript
+                </span>
+                @if (transcriptionChunks.Count > 0)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ClearTranscript">
+                        <i class="bi bi-trash me-1"></i> Clear
+                    </button>
+                }
+            </div>
+            <div class="card-body">
+                @if (transcriptionChunks.Count > 0)
+                {
+                    <div class="realtime-transcript-container">
+                        @foreach (var chunk in transcriptionChunks)
+                        {
+                            <div class="transcript-chunk mb-2 @(chunk == transcriptionChunks[^1] && isTranscribingChunk ? "chunk-processing" : "")">
+                                <small class="text-secondary d-block">
+                                    <i class="bi bi-clock me-1"></i>@chunk.Timestamp.ToString(@"mm\:ss")
+                                    @if (chunk.DetectedLanguage is not null)
+                                    {
+                                        <span class="ms-2 badge bg-secondary">@chunk.DetectedLanguage</span>
+                                    }
+                                </small>
+                                <span>@chunk.Text</span>
+                            </div>
+                        }
+                        @if (isTranscribingChunk)
+                        {
+                            <div class="transcript-chunk mb-2 chunk-processing">
+                                <small class="text-secondary d-block">
+                                    <span class="spinner-border spinner-border-sm me-1"></span> Transcribing chunk...
+                                </small>
+                            </div>
+                        }
+                    </div>
+
+                    <hr class="border-secondary" />
+                    <div class="mt-3">
+                        <h6 class="text-secondary">
+                            <i class="bi bi-file-text me-1"></i> Full Transcript
+                        </h6>
+                        <div class="transcript-box p-3 rounded">
+                            @FullTranscript
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-secondary py-5">
+                        <i class="bi bi-broadcast display-4"></i>
+                        <p class="mt-3">Start real-time transcription to see live results here.</p>
+                        <p class="small">Audio will be captured in chunks and transcribed as you speak.</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string selectedModelId = KnownWhisperModels.WhisperTinyEn.Id;
+    private int chunkIntervalMs = 5000;
+    private bool isStreaming;
+    private bool isLoadingModel;
+    private bool isTranscribingChunk;
+    private TimeSpan elapsedTime;
+    private string progressMessage = "Initializing...";
+    private double downloadPercent;
+    private string? errorMessage;
+
+    private WhisperClient? whisperClient;
+    private DotNetObjectReference<RealtimeTranscribe>? dotNetRef;
+    private System.Timers.Timer? elapsedTimer;
+    private DateTime streamingStartTime;
+    private readonly List<TranscriptionChunk> transcriptionChunks = [];
+    private readonly SemaphoreSlim transcriptionLock = new(1, 1);
+
+    private string FullTranscript => string.Join(" ", transcriptionChunks.Select(c => c.Text)).Trim();
+
+    private async Task StartRealtime()
+    {
+        errorMessage = null;
+        transcriptionChunks.Clear();
+        downloadPercent = 0;
+        isLoadingModel = true;
+        progressMessage = "Loading model...";
+
+        try
+        {
+            var model = KnownWhisperModels.FindById(selectedModelId) ?? KnownWhisperModels.WhisperTinyEn;
+
+            var progress = new Progress<DownloadProgress>(p =>
+            {
+                progressMessage = p.Stage switch
+                {
+                    DownloadStage.Checking => "Checking model...",
+                    DownloadStage.Downloading => $"Downloading model... {p.PercentComplete:F0}%",
+                    DownloadStage.Validating => "Validating model...",
+                    DownloadStage.Complete => "Model ready!",
+                    _ => p.Message ?? "Processing..."
+                };
+                downloadPercent = p.PercentComplete;
+                InvokeAsync(StateHasChanged);
+            });
+
+            whisperClient = await WhisperClient.CreateAsync(
+                new WhisperOptions { Model = model },
+                progress: progress);
+
+            isLoadingModel = false;
+            progressMessage = string.Empty;
+            StateHasChanged();
+
+            dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("audioRecorder.initialize");
+            await JS.InvokeVoidAsync("audioRecorder.startRealtimeRecording", dotNetRef, chunkIntervalMs);
+
+            isStreaming = true;
+            streamingStartTime = DateTime.UtcNow;
+
+            elapsedTimer = new System.Timers.Timer(500);
+            elapsedTimer.Elapsed += (_, _) =>
+            {
+                elapsedTime = DateTime.UtcNow - streamingStartTime;
+                InvokeAsync(StateHasChanged);
+            };
+            elapsedTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Could not start: {ex.Message}";
+            isLoadingModel = false;
+            whisperClient?.Dispose();
+            whisperClient = null;
+        }
+    }
+
+    private async Task StopRealtime()
+    {
+        elapsedTimer?.Stop();
+        elapsedTimer?.Dispose();
+        elapsedTimer = null;
+
+        try
+        {
+            await JS.InvokeVoidAsync("audioRecorder.stopRealtimeRecording");
+        }
+        catch
+        {
+            // Ignore JS errors during stop
+        }
+
+        isStreaming = false;
+        isTranscribingChunk = false;
+        whisperClient?.Dispose();
+        whisperClient = null;
+    }
+
+    [JSInvokable]
+    public async Task OnAudioChunkReady(byte[] audioData)
+    {
+        if (whisperClient is null || audioData.Length == 0) return;
+
+        await transcriptionLock.WaitAsync();
+        try
+        {
+            isTranscribingChunk = true;
+            await InvokeAsync(StateHasChanged);
+
+            var tempPath = Path.Combine(Path.GetTempPath(), $"blazor_rt_{Guid.NewGuid():N}.wav");
+            try
+            {
+                await File.WriteAllBytesAsync(tempPath, audioData);
+                var result = await whisperClient.TranscribeAsync(tempPath);
+
+                if (!string.IsNullOrWhiteSpace(result.Text))
+                {
+                    transcriptionChunks.Add(new TranscriptionChunk
+                    {
+                        Text = result.Text.Trim(),
+                        Timestamp = DateTime.UtcNow - streamingStartTime,
+                        DetectedLanguage = result.DetectedLanguage,
+                        Duration = result.Duration
+                    });
+                }
+            }
+            finally
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+
+            isTranscribingChunk = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            isTranscribingChunk = false;
+            errorMessage = $"Chunk error: {ex.Message}";
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            transcriptionLock.Release();
+        }
+    }
+
+    [JSInvokable]
+    public void OnRealtimeError(string error)
+    {
+        errorMessage = error;
+        isStreaming = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ClearTranscript()
+    {
+        transcriptionChunks.Clear();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        elapsedTimer?.Stop();
+        elapsedTimer?.Dispose();
+
+        if (isStreaming)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("audioRecorder.stopRealtimeRecording");
+            }
+            catch
+            {
+                // Component disposing
+            }
+        }
+
+        whisperClient?.Dispose();
+        dotNetRef?.Dispose();
+        transcriptionLock.Dispose();
+    }
+
+    private sealed class TranscriptionChunk
+    {
+        public required string Text { get; set; }
+        public TimeSpan Timestamp { get; set; }
+        public string? DetectedLanguage { get; set; }
+        public TimeSpan Duration { get; set; }
+    }
+}
