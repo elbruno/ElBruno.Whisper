@@ -39,3 +39,10 @@
 - Changed `new int[0]` → `new[] { 1 }` in WhisperInferenceSession.cs line 145
 - Pattern: when ONNX models declare an input as 1D, always use `new[] { 1 }` shape even for single-element booleans — never `new int[0]`
 - Key file: `src/ElBruno.Whisper/Inference/WhisperInferenceSession.cs`
+
+### 2026-03-30 - Cross-team sync: Test expansion and issue fixes
+- Lambert completed 32 new tests across 4 files (inference, audio processing, client, integration)
+- Total test count: 109 non-integration tests (up from 77)
+- Test infrastructure: InternalsVisibleTo enables direct internal type testing, integration traits for CI filtering
+- All tests passing; ready for CI/CD pipeline integration
+- Key decision documented: Tensor rank must match model declaration for all ONNX input tensors
