@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src\ElBruno.Whisper\ElBruno.Whisper.csproj" />
+  </Folder>
+  <Folder Name="/src/tests/">
+    <Project Path="src\tests\ElBruno.Whisper.Tests\ElBruno.Whisper.Tests.csproj" />
+  </Folder>
+  <Folder Name="/src/samples/">
+    <Project Path="src\samples\HelloWhisper\HelloWhisper.csproj" />
+  </Folder>
+</Solution>

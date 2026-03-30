@@ -1,0 +1,37 @@
+# Squad: ignore generated logs
+.squad/orchestration-log/
+.squad/log/
+
+## .NET Build Output
+bin/
+obj/
+*.nupkg
+*.snupkg
+*.dll
+*.exe
+*.pdb
+*.user
+*.suo
+*.cache
+*.vs/
+.vs/
+
+## Test Results
+TestResults/
+*.trx
+*.coverage
+
+## NuGet packages
+packages/
+*.lock.json
+
+## Rider
+.idea/
+*.sln.iml
+
+## Visual Studio Code
+.vscode/
+
+## OS Files
+.DS_Store
+Thumbs.db

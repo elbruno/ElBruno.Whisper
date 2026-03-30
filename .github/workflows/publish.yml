@@ -1,0 +1,35 @@
+name: Publish to NuGet
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore ElBruno.Whisper.slnx
+
+      - name: Build
+        run: dotnet build ElBruno.Whisper.slnx --no-restore -c Release
+
+      - name: Test
+        run: dotnet test ElBruno.Whisper.slnx --no-build --framework net8.0 --verbosity normal -c Release
+
+      - name: Pack
+        run: dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-build --output nupkg
+
+      - name: Publish to NuGet
+        run: dotnet nuget push nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
