@@ -136,6 +136,60 @@ background with warm accent colors. Square format, 1:1 aspect ratio.
 
 ---
 
+## 📦 NuGet Package Logo (1:1, 128×128)
+
+### Primary Logo — Microphone with Sound Waves
+
+> **Aspect Ratio:** 1:1 (square)
+> **Size:** 128×128 px (NuGet icon spec)
+> **Style:** Flat icon, minimal, app-icon style
+> **Platforms:** DALL-E 3, Midjourney, Stable Diffusion XL
+
+```
+A minimal flat-design app icon for a NuGet package. Dark blue rounded-rectangle background
+(#1E3C8C). Centered white microphone silhouette with a U-shaped arc below it representing
+a mic stand. Two or three concentric sound wave arcs radiate from the right side of the
+microphone in light blue (#C8DCFF). No text, no gradients, no shadows. Clean vector-style
+icon suitable for 128×128 pixels. Square format, 1:1 aspect ratio.
+```
+
+---
+
+### Alternate Logo — Waveform to Text
+
+> **Aspect Ratio:** 1:1 (square)
+> **Size:** 128×128 px
+> **Style:** Flat icon, abstract, minimal
+> **Platforms:** DALL-E 3, Midjourney, Stable Diffusion XL
+
+```
+A minimal flat-design app icon for a speech-to-text NuGet package. Deep navy rounded-rectangle
+background. Left half shows a stylized audio waveform in white with varying bar heights. Right
+half shows clean horizontal lines representing transcribed text, also in white. A subtle
+purple-to-blue gradient glow connects the waveform to the text lines, suggesting transformation.
+No literal microphone, no characters, no borders. Ultra-clean at 128×128 pixels.
+Square format, 1:1 aspect ratio.
+```
+
+---
+
+### Alternate Logo — Whisper Wordmark Style
+
+> **Aspect Ratio:** 1:1 (square)
+> **Size:** 128×128 px
+> **Style:** Bold typographic icon
+> **Platforms:** DALL-E 3, Midjourney, Stable Diffusion XL
+
+```
+A bold typographic app icon for a speech-to-text library called "Whisper". Deep indigo
+rounded-rectangle background (#1A1A3E). A large stylized "W" in white takes up most of
+the icon, with the middle peak of the W shaped like an audio waveform peak. Tiny sound
+wave arcs emanate from the top of the W in light cyan. No other text, no borders, no
+gradients. Crisp and legible at 128×128 pixels. Square format, 1:1 aspect ratio.
+```
+
+---
+
 ## 🎨 Usage Tips
 
 - **DALL-E 3**: Use prompts as-is; works well with detailed scene descriptions
