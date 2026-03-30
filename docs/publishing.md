@@ -1,101 +1,146 @@
 # Publishing Guide
 
-## Automated Publishing with GitHub Actions
+## Overview
 
-ElBruno.Whisper uses GitHub Actions to automate NuGet package publishing. This guide explains the workflow and manual publishing steps if needed.
+ElBruno.Whisper publishes NuGet packages automatically via GitHub Actions using **OIDC trusted publishing** — no API keys or stored secrets required.
 
-## GitHub Actions Workflow
+**Flow:** Create GitHub Release → GitHub Actions workflow triggers → builds, tests, packs → authenticates with NuGet.org via OIDC → pushes package.
 
-The `.github/workflows/publish.yml` workflow:
-- Triggers on GitHub release creation or manual dispatch
-- Builds the solution in Release mode
-- Runs all tests
-- Creates NuGet package
-- Publishes to NuGet.org using OIDC (no stored credentials)
+## Prerequisites
 
-### Publishing a Release
+### NuGet.org Trusted Publisher Setup
 
-1. **Create a Release on GitHub:**
-   - Go to https://github.com/elbruno/ElBruno.Whisper/releases
-   - Click "Create a new release"
-   - Tag: `v1.0.0` (matches version in csproj)
-   - Title: `Release 1.0.0`
-   - Description: List of changes/features
-   - Click "Publish release"
+OIDC trusted publishing lets GitHub Actions push packages to NuGet.org without API keys. You need to configure this once on NuGet.org:
 
-2. **Automatic Publishing:**
-   - GitHub Actions trigger automatically
-   - Workflow builds, tests, packs, and publishes to NuGet.org
-   - Check workflow status in Actions tab
+1. Go to [NuGet.org](https://www.nuget.org/) and sign in
+2. Navigate to your account → **API Keys** → **Trusted Publishers**
+3. Add a new trusted publisher:
+   - **Repository owner:** `elbruno`
+   - **Repository name:** `ElBruno.Whisper`
+   - **Workflow file:** `publish.yml`
+   - **Environment:** `release` (must match the workflow)
+4. Save the configuration
 
-3. **Verify:**
-   - https://www.nuget.org/packages/ElBruno.Whisper
-   - Package appears within 5-10 minutes
+> **Note:** The trusted publishing key will be added later once the initial package is registered on NuGet.org.
+
+### GitHub Repository Settings
+
+The publish workflow requires the `id-token: write` permission to generate OIDC tokens. This is configured in the workflow file — no additional repository settings are needed.
+
+## How OIDC Authentication Works
+
+Traditional NuGet publishing requires storing an API key as a GitHub secret. OIDC eliminates this:
+
+1. **GitHub Actions** generates a short-lived OIDC token for the workflow run
+2. The workflow uses `NuGet/login@v1` to exchange the OIDC token for NuGet credentials
+3. **NuGet.org** validates the token against the trusted publisher configuration
+4. The token authorizes the package push — no secrets stored anywhere
+
+```yaml
+# Key workflow steps for OIDC authentication
+permissions:
+  id-token: write    # Required for OIDC token generation
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release    # Must match NuGet trusted publisher config
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - run: dotnet build ElBruno.Whisper.slnx -c Release
+      - run: dotnet test ElBruno.Whisper.slnx -c Release --no-build
+
+      - run: dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-build
+
+      # OIDC login — no API key needed
+      - name: NuGet OIDC Login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - run: dotnet nuget push artifacts/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+```
 
 ## Version Management
 
+### Version Sources
+
+The package version can come from two places:
+
+1. **Release tag** (preferred): The workflow extracts the version from the GitHub release tag (e.g., `v1.2.0` → `1.2.0`) and passes it to `dotnet pack` with `/p:Version=1.2.0`
+2. **csproj fallback**: If no tag version is provided, the version in the `.csproj` file is used
+
 ### Semantic Versioning
 
-Follow semantic versioning (MAJOR.MINOR.PATCH):
+Follow [semver](https://semver.org/) (MAJOR.MINOR.PATCH):
 
-- **MAJOR** (1.0.0 → 2.0.0) — Breaking changes
+- **MAJOR** (1.0.0 → 2.0.0) — Breaking API changes
 - **MINOR** (1.0.0 → 1.1.0) — New features, backward compatible
 - **PATCH** (1.0.0 → 1.0.1) — Bug fixes, backward compatible
 
-### Updating Version
+### Pre-Release Versions
 
-Version is stored in the library project file (`src/ElBruno.Whisper/ElBruno.Whisper.csproj`):
+Use pre-release suffixes for early releases:
+
+```
+1.0.0-alpha.1    # Early development
+1.0.0-beta.1     # Feature complete, testing
+1.0.0-rc.1       # Release candidate
+1.0.0            # Stable
+```
+
+## How to Publish
+
+### Step 1: Update Version (if needed)
+
+If you want the version to come from the csproj rather than the release tag, update it:
 
 ```xml
+<!-- src/ElBruno.Whisper/ElBruno.Whisper.csproj -->
 <PropertyGroup>
-    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <Version>1.0.0</Version>
-    <PackageVersion>1.0.0</PackageVersion>
+    <Version>1.1.0</Version>
+    <PackageVersion>1.1.0</PackageVersion>
 </PropertyGroup>
 ```
 
-Update before creating a release:
+### Step 2: Create a GitHub Release
 
-```bash
-# Edit the csproj file with new version
-# Then commit and push
-git add src/ElBruno.Whisper/ElBruno.Whisper.csproj
-git commit -m "Bump version to 1.1.0"
-git push origin main
+1. Go to [Releases](https://github.com/elbruno/ElBruno.Whisper/releases)
+2. Click **"Create a new release"**
+3. **Tag:** `v1.1.0` (creates tag on publish)
+4. **Target:** `main` branch
+5. **Title:** `v1.1.0`
+6. **Description:** List changes, new features, and fixes
+7. Click **"Publish release"**
 
-# Create release tag
-git tag v1.1.0
-git push origin v1.1.0
-```
+### Step 3: Monitor the Workflow
 
-## Manual Publishing (if needed)
+1. Go to [Actions](https://github.com/elbruno/ElBruno.Whisper/actions)
+2. Find the triggered `publish` workflow run
+3. Watch it build → test → pack → push
 
-### Prerequisites
+### Step 4: Verify on NuGet.org
 
-- NuGet.org account with package permission
-- API key from https://www.nuget.org/account/apikeys
-
-### Steps
-
-```bash
-# 1. Build Release package
-dotnet build ElBruno.Whisper.slnx -c Release
-
-# 2. Pack
-dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-build
-
-# 3. Publish
-dotnet nuget push bin/Release/ElBruno.Whisper.1.0.0.nupkg \
-  --api-key YOUR_NUGET_API_KEY \
-  --source https://api.nuget.org/v3/index.json
-```
+- Visit https://www.nuget.org/packages/ElBruno.Whisper
+- Package typically appears within **5–10 minutes** after push
+- NuGet.org runs validation before listing (signing, metadata checks)
 
 ## Package Structure
 
 The published NuGet package includes:
 
 ```
-ElBruno.Whisper.1.0.0.nupkg
+ElBruno.Whisper.1.1.0.nupkg
 ├── lib/
 │   ├── net8.0/
 │   │   ├── ElBruno.Whisper.dll
@@ -109,36 +154,6 @@ ElBruno.Whisper.1.0.0.nupkg
 └── .nuspec (metadata)
 ```
 
-## Pre-Release Versions
-
-For beta/preview releases:
-
-### Version Suffix
-
-```xml
-<Version>1.0.0-beta.1</Version>
-```
-
-### Workflow Behavior
-
-- GitHub Actions publish with `--pre-release` flag
-- Appears on NuGet.org as "prerelease"
-- Lower sort priority (stable versions preferred)
-
-### Example Release Flow
-
-1. Develop and test feature branch
-2. Merge to main
-3. Update version: `1.0.0-beta.1`
-4. Create GitHub release tagged `v1.0.0-beta.1`
-5. Actions publishes
-6. Get feedback
-7. Update version: `1.0.0-rc.1` (release candidate)
-8. Get final feedback
-9. Update version: `1.0.0` (stable)
-10. Create GitHub release tagged `v1.0.0`
-11. Actions publishes stable
-
 ## Testing Before Release
 
 ```bash
@@ -148,52 +163,45 @@ dotnet test ElBruno.Whisper.slnx -c Release
 # Build all frameworks
 dotnet build ElBruno.Whisper.slnx -c Release
 
-# Pack locally
+# Pack locally (verify package contents)
 dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release
-
-# Test local package
-dotnet add package --source bin/Release ElBruno.Whisper
 ```
 
 ## Troubleshooting
 
-### Package Push Fails
+### OIDC Token Errors
 
-**Error:** `401 Unauthorized`
-- Check API key is valid
-- Verify account has package permission
-- Ensure API key has push scope
+**Error:** `Failed to get OIDC token`
+- Ensure the workflow has `id-token: write` permission
+- Check that the `environment` in the workflow matches the NuGet trusted publisher config
+
+**Error:** `403 Forbidden` on push
+- Verify the trusted publisher is configured on NuGet.org
+- Check repository owner, name, workflow file, and environment all match exactly
+
+### Package Push Errors
+
+**Error:** `409 Conflict`
+- The package version already exists on NuGet.org — bump the version
+- Use `--skip-duplicate` flag to avoid failures on re-runs
 
 **Error:** `400 Bad Request`
-- Check package version matches csproj
-- Ensure version not already published
-- Verify package metadata in nuspec
-
-### OIDC Authentication (GitHub Actions)
-
-The publish workflow uses OIDC for GitHub → NuGet.org authentication (no stored secrets):
-
-1. GitHub Actions generates OIDC token
-2. NuGet.org validates token
-3. Token authorizes push to package
-
-Setup is automatic if configured in NuGet.org settings.
+- Verify package metadata (id, version, description) in the csproj/nuspec
+- Ensure the package ID matches what's registered on NuGet.org
 
 ## Release Checklist
 
-Before publishing:
-
-- [ ] Update version in csproj
-- [ ] Update CHANGELOG/release notes
-- [ ] Run full test suite: `dotnet test ElBruno.Whisper.slnx`
+- [ ] Update version in csproj (if not using tag-based versioning)
+- [ ] Run full test suite: `dotnet test ElBruno.Whisper.slnx -c Release`
 - [ ] Build all frameworks: `dotnet build ElBruno.Whisper.slnx -c Release`
-- [ ] Review README and docs
-- [ ] Create GitHub release with detailed description
-- [ ] Verify GitHub Actions succeeds
+- [ ] Review README and documentation
+- [ ] Create GitHub release with descriptive notes
+- [ ] Monitor GitHub Actions workflow
 - [ ] Verify package on NuGet.org within 10 minutes
 
 ## Related Documentation
 
-- [NuGet Docs](https://docs.microsoft.com/nuget/)
+- [NuGet Trusted Publishing](https://devblogs.microsoft.com/nuget/introducing-nuget-trusted-publishers/)
+- [NuGet/login Action](https://github.com/NuGet/login)
 - [Semantic Versioning](https://semver.org/)
-- [GitHub Actions](https://docs.github.com/actions)
+- [GitHub Actions OIDC](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect)

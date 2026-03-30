@@ -149,6 +149,21 @@ Console.WriteLine(result.Duration);               // Audio duration
 
 For detailed troubleshooting, see [docs](docs/).
 
+## Samples
+
+| Sample | Description |
+|--------|-------------|
+| [HelloWhisper](src/samples/HelloWhisper) | Minimal console transcription |
+| [BlazorWhisper](src/samples/BlazorWhisper) | Blazor app with audio recording and real-time transcription |
+
+## Documentation
+
+- [Getting Started](docs/getting-started.md) — installation, first steps, configuration
+- [API Reference](docs/api-reference.md) — full API documentation
+- [Architecture](docs/architecture.md) — design decisions and internal structure
+- [Image Prompts](docs/image-prompts.md) — prompts for generating blog and social media images
+- [Publishing](docs/publishing.md) — NuGet package publishing with OIDC
+
 ## Building from Source
 
 ```bash
@@ -158,15 +173,38 @@ dotnet build ElBruno.Whisper.slnx
 dotnet test ElBruno.Whisper.slnx
 ```
 
-## Contributing
+## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please:
 
-## License
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 📄 License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ## Related Projects
 
 - [ElBruno.LocalLLMs](https://github.com/elbruno/ElBruno.LocalLLMs) — Run local LLMs in .NET
 - [ElBruno.HuggingFace](https://github.com/elbruno/ElBruno.HuggingFace) — HuggingFace model utilities for .NET
+
+## 🙏 Acknowledgments
+
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) — inference engine
+- [OpenAI Whisper](https://github.com/openai/whisper) — speech-to-text model
+- [Hugging Face](https://huggingface.co/) — model hosting and community
+- [ONNX Community](https://huggingface.co/onnx-community) — ONNX model conversions
+
+## 👋 About the Author
+
+**Made with ❤️ by [Bruno Capuano (ElBruno)](https://github.com/elbruno)**
+
+- 📝 **Blog**: [elbruno.com](https://elbruno.com)
+- 📺 **YouTube**: [youtube.com/elbruno](https://youtube.com/elbruno)
+- 🔗 **LinkedIn**: [linkedin.com/in/elbruno](https://linkedin.com/in/elbruno)
+- 𝕏 **Twitter**: [twitter.com/elbruno](https://twitter.com/elbruno)
+- 🎙️ **Podcast**: [notienenombre.com](https://notienenombre.com)

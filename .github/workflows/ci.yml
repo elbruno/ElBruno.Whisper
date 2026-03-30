@@ -24,10 +24,10 @@ jobs:
         run: dotnet restore ElBruno.Whisper.slnx -p:TargetFrameworks=net8.0
 
       - name: Build
-        run: dotnet build ElBruno.Whisper.slnx --no-restore -p:TargetFrameworks=net8.0 -c Release
+        run: dotnet build ElBruno.Whisper.slnx --no-restore -p:TargetFrameworks=net8.0
 
       - name: Test
-        run: dotnet test ElBruno.Whisper.slnx --no-build --framework net8.0 --verbosity normal --logger "trx;LogFileName=test-results.trx" -c Release
+        run: dotnet test ElBruno.Whisper.slnx --no-build --framework net8.0 --verbosity normal --logger "trx;LogFileName=test-results.trx"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
