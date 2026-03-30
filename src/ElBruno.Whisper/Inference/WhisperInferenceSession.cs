@@ -138,11 +138,11 @@ internal sealed class WhisperInferenceSession : IDisposable
                 NamedOnnxValue.CreateFromTensor("encoder_hidden_states", encoderTensor)
             };
 
-            // Add use_cache_branch scalar bool if the merged decoder expects it
+            // Add use_cache_branch 1D bool tensor if the merged decoder expects it
             if (_hasCacheBranch)
             {
                 decoderInputs.Add(NamedOnnxValue.CreateFromTensor("use_cache_branch",
-                    new DenseTensor<bool>(new[] { useCacheBranch }, new int[0])));
+                    new DenseTensor<bool>(new[] { useCacheBranch }, new[] { 1 })));
             }
 
             // Add past key-value cache inputs (empty on first step, cached on subsequent)
