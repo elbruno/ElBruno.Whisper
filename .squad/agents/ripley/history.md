@@ -46,3 +46,23 @@
 - Test infrastructure: InternalsVisibleTo enables direct internal type testing, integration traits for CI filtering
 - All tests passing; ready for CI/CD pipeline integration
 - Key decision documented: Tensor rank must match model declaration for all ONNX input tensors
+
+### 2025-07-14 - Fix: Empty KV cache tensor shapes causing ONNX Reshape crash
+- The merged decoder's ONNX `If` node validates shapes for BOTH branches even when `use_cache_branch=false`
+- Previous empty cache used `seq=0` → shapes like `[1, 6, 0, 64]` → Reshape node fails on 0-length dims
+- Fix: set ALL dynamic dimensions (-1) to 1, allocate `new float[totalElements]` instead of `Array.Empty<float>()`
+- Result: shapes like `[1, 6, 1, 64]` — zero-filled data is ignored since `use_cache_branch=false`
+- Pattern: ONNX tensors should never have 0-length dimensions, even for "unused" cache inputs — the graph still validates shapes
+- Also excluded integration tests from CI/CD via `--filter "Category!=Integration"` in both `ci.yml` and `publish.yml`
+- Key files: `src/ElBruno.Whisper/Inference/WhisperInferenceSession.cs`, `.github/workflows/ci.yml`, `.github/workflows/publish.yml`
+
+### 2025-07-14 - .NET Aspire Orchestration for BlazorWhisper
+- Added Aspire AppHost (`src/samples/BlazorWhisper.AppHost/`) with `Aspire.AppHost.Sdk/13.1.3` targeting net10.0
+- Added ServiceDefaults (`src/samples/BlazorWhisper.ServiceDefaults/`) with OpenTelemetry, health checks, resilience, and service discovery
+- Upgraded BlazorWhisper from net8.0 → net10.0 (required for ServiceDefaults compatibility; library already multi-targets net8.0;net10.0)
+- Wired `builder.AddServiceDefaults()` and `app.MapDefaultEndpoints()` in BlazorWhisper's Program.cs
+- AppHost registers BlazorWhisper as `"blazor-whisper"` project resource
+- Aspire templates generate into `AppHost.cs` (not `Program.cs`) — the entry point file is `AppHost.cs`
+- Updated `ElBruno.Whisper.slnx` with both new projects under `/src/samples/`
+- Pattern: Aspire workload not required if templates are already installed; `dotnet new list --tag aspire` confirms availability
+- Key files: `src/samples/BlazorWhisper.AppHost/`, `src/samples/BlazorWhisper.ServiceDefaults/`, `src/samples/BlazorWhisper/Program.cs`

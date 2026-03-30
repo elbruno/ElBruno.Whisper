@@ -8,5 +8,7 @@
   <Folder Name="/src/samples/">
     <Project Path="src\samples\HelloWhisper\HelloWhisper.csproj" />
     <Project Path="src\samples\BlazorWhisper\BlazorWhisper.csproj" />
+    <Project Path="src\samples\BlazorWhisper.AppHost\BlazorWhisper.AppHost.csproj" />
+    <Project Path="src\samples\BlazorWhisper.ServiceDefaults\BlazorWhisper.ServiceDefaults.csproj" />
   </Folder>
 </Solution>
