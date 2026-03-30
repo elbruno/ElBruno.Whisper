@@ -65,7 +65,10 @@ public sealed class WhisperClient : IDisposable
 
         var encoderPath = Path.Combine(modelPath, "onnx", "encoder_model.onnx");
         var decoderPath = Path.Combine(modelPath, "onnx", "decoder_model_merged.onnx");
-        var inference = new WhisperInferenceSession(encoderPath, decoderPath);
+        var inference = new WhisperInferenceSession(
+            encoderPath, decoderPath,
+            options.Model.NumDecoderLayers,
+            options.Model.EncoderDimension);
 
         return new WhisperClient(options, audioProcessor, tokenizer, inference);
     }
