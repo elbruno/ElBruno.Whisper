@@ -85,10 +85,8 @@ public sealed class WhisperClient : IDisposable
 
         return Task.Run(() =>
         {
-            var startTime = DateTime.UtcNow;
-
             // Process audio to mel spectrogram
-            var melSpec = _audioProcessor.ProcessAudioFile(audioFilePath);
+            var (melSpec, audioDuration) = _audioProcessor.ProcessAudioFile(audioFilePath);
 
             // Get initial tokens
             var initialTokens = GetInitialTokens();
@@ -104,13 +102,11 @@ public sealed class WhisperClient : IDisposable
             // Decode tokens
             var text = _tokenizer.Decode(tokens);
 
-            var duration = DateTime.UtcNow - startTime;
-
             return new TranscriptionResult
             {
                 Text = text,
                 DetectedLanguage = _options.Language,
-                Duration = duration
+                Duration = audioDuration
             };
         }, cancellationToken);
     }
@@ -124,10 +120,8 @@ public sealed class WhisperClient : IDisposable
     {
         return Task.Run(() =>
         {
-            var startTime = DateTime.UtcNow;
-
             // Process audio to mel spectrogram
-            var melSpec = _audioProcessor.ProcessAudioStream(audioStream);
+            var (melSpec, audioDuration) = _audioProcessor.ProcessAudioStream(audioStream);
 
             // Get initial tokens
             var initialTokens = GetInitialTokens();
@@ -143,13 +137,11 @@ public sealed class WhisperClient : IDisposable
             // Decode tokens
             var text = _tokenizer.Decode(tokens);
 
-            var duration = DateTime.UtcNow - startTime;
-
             return new TranscriptionResult
             {
                 Text = text,
                 DetectedLanguage = _options.Language,
-                Duration = duration
+                Duration = audioDuration
             };
         }, cancellationToken);
     }

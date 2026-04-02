@@ -94,8 +94,8 @@ public class MelSpectrogramTests
         }
         var avgMagnitude = sum / count;
 
-        // Silent audio log-mel values are dominated by the floor constant (typically log(1e-10) ≈ -23).
-        // The absolute average may be non-trivial, but should be finite and consistent.
+        // Silent audio log-mel values after Whisper normalization are in the [-1, 1] range.
+        // The absolute average should be well bounded.
         Assert.True(avgMagnitude < 30.0, $"Silent audio should produce bounded mel values, but got average: {avgMagnitude}");
     }
 
