@@ -21,13 +21,17 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore
-        run: dotnet restore ElBruno.Whisper.slnx -p:TargetFrameworks=net8.0
+        run: |
+          dotnet restore src/ElBruno.Whisper/ElBruno.Whisper.csproj -p:TargetFrameworks=net8.0
+          dotnet restore src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj -p:TargetFrameworks=net8.0
 
       - name: Build
-        run: dotnet build ElBruno.Whisper.slnx --no-restore -p:TargetFrameworks=net8.0
+        run: |
+          dotnet build src/ElBruno.Whisper/ElBruno.Whisper.csproj --no-restore -p:TargetFrameworks=net8.0
+          dotnet build src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --no-restore -p:TargetFrameworks=net8.0
 
       - name: Test
-        run: dotnet test ElBruno.Whisper.slnx --no-build --framework net8.0 --verbosity normal --filter "Category!=Integration" --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --no-build --framework net8.0 --verbosity normal --filter "Category!=Integration" --logger "trx;LogFileName=test-results.trx"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
