@@ -1,15 +1,17 @@
-# Decision: Mel Spectrogram Computation Must Match OpenAI Whisper Reference
+# ElBruno.Whisper — Team Decisions
+
+## Decision: Mel Spectrogram Computation Must Match OpenAI Whisper Reference
 
 **Date:** 2025-07-14  
 **Author:** Ripley (Backend Dev)  
 **Status:** Implemented  
 **Issue:** #5
 
-## Context
+### Context
 
 Transcription was producing completely wrong text because the mel spectrogram computation differed from OpenAI's Whisper reference implementation in critical ways. The model received spectrogram values in a completely wrong numerical range.
 
-## Decision
+### Decision
 
 We have aligned the mel spectrogram computation to exactly match OpenAI Whisper's reference implementation:
 
@@ -28,7 +30,7 @@ We have aligned the mel spectrogram computation to exactly match OpenAI Whisper'
 
 6. **Audio Duration:** Return actual audio duration from AudioProcessor instead of wall-clock processing time. This gives users accurate audio length, not inference speed.
 
-## Rationale
+### Rationale
 
 - **Numerical Compatibility:** ONNX models are exported from Python Whisper and expect inputs in specific numerical ranges. Deviating from reference implementation causes model misbehavior.
 - **Power Spectrum:** Energy representation (squared) is standard for spectrograms and matches what the model was trained on.
@@ -37,7 +39,7 @@ We have aligned the mel spectrogram computation to exactly match OpenAI Whisper'
 - **Pre-padding:** Ensures consistent tensor shapes (3000 frames) regardless of audio length, simplifying inference code and matching training data.
 - **Audio Duration:** Users care about actual audio length for billing, progress bars, etc. — not how fast we processed it.
 
-## Implementation
+### Implementation
 
 - `MelSpectrogramProcessor.cs`: Updated `ComputeMagnitude()` and `ComputeMelSpectrogram()` with power spectrum, log10, and normalization
 - `AudioProcessor.cs`: Pre-pad audio to 30 seconds, return tuple with audio duration, use 0.0f padding
@@ -45,20 +47,53 @@ We have aligned the mel spectrogram computation to exactly match OpenAI Whisper'
 - All tests updated to handle tuple return values
 - New test `ProcessAudioFile_ReturnsPositiveAudioDuration` validates duration computation
 
-## Impact
+### Impact
 
 - **Correctness:** Transcription now produces accurate text matching Python Whisper output
 - **Breaking Change:** AudioProcessor methods now return `(float[] MelSpectrogram, TimeSpan AudioDuration)` tuples instead of `float[]`
 - **Test Coverage:** All 224 tests passing (112 per framework)
 
-## Alternatives Considered
+### Alternatives Considered
 
 1. **Keep natural log:** Would maintain backward compatibility but produce wrong results. Rejected — correctness is paramount.
 2. **Optional normalization:** Would allow users to disable it. Rejected — the model expects normalized inputs, making it optional would cause confusion.
 3. **Post-pad audio (after STFT):** Would preserve exact audio duration in STFT. Rejected — Whisper reference pre-pads, and we must match exactly.
 
-## References
+### References
 
 - Issue #5: Transcription produces wrong text
 - OpenAI Whisper reference implementation: https://github.com/openai/whisper
 - Key files: `src/ElBruno.Whisper/Audio/MelSpectrogramProcessor.cs`, `src/ElBruno.Whisper/Audio/AudioProcessor.cs`
+
+---
+
+## Decision: .NET Aspire Orchestration for BlazorWhisper
+
+**By:** Ripley (Backend Dev)  
+**Date:** 2025-07-14  
+**Status:** Implemented
+
+### Context
+
+Bruno wanted better observability for the BlazorWhisper sample app after a WAV upload crash (caused by the ONNX empty cache tensor bug, now fixed). Aspire provides a dashboard with distributed tracing, logging, and health checks out of the box.
+
+### Decision
+
+Added .NET Aspire orchestration to the BlazorWhisper sample:
+
+1. **BlazorWhisper.AppHost** — Aspire AppHost (Aspire.AppHost.Sdk/13.1.3, net10.0) that orchestrates the Blazor app
+2. **BlazorWhisper.ServiceDefaults** — Shared project with OpenTelemetry, health checks, resilience, and service discovery
+3. **BlazorWhisper upgraded to net10.0** — Required for ServiceDefaults compatibility (the library already supports net10.0)
+
+### Key Details
+
+- AppHost entry point is `AppHost.cs` (Aspire template convention), not `Program.cs`
+- ServiceDefaults uses OpenTelemetry packages v1.14.0 for traces/metrics/logs
+- Health endpoints (`/health`, `/alive`) only exposed in Development environment
+- BlazorWhisper can still run standalone without the AppHost
+
+### Consequences
+
+- **Positive:** Full observability via Aspire dashboard (traces, logs, metrics, health) for debugging transcription issues
+- **Positive:** Standard resilience and service discovery patterns ready if more services are added
+- **Trade-off:** BlazorWhisper now targets net10.0 instead of net8.0 (acceptable since .NET 10 SDK is available)
