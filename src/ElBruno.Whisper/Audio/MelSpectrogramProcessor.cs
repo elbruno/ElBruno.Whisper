@@ -33,12 +33,33 @@ internal sealed class MelSpectrogramProcessor
         // Apply mel filterbank
         var melSpec = ApplyMelFilterbank(magSpec);
 
-        // Apply log
+        // Apply log10 (matching OpenAI Whisper reference)
         for (int i = 0; i < melSpec.GetLength(0); i++)
         {
             for (int j = 0; j < melSpec.GetLength(1); j++)
             {
-                melSpec[i, j] = MathF.Log(Math.Max(melSpec[i, j], 1e-10f));
+                melSpec[i, j] = MathF.Log10(Math.Max(melSpec[i, j], 1e-10f));
+            }
+        }
+
+        // Whisper normalization: clamp to within 8.0 of max, then scale to ~[-1, 1]
+        float maxVal = float.MinValue;
+        for (int i = 0; i < melSpec.GetLength(0); i++)
+        {
+            for (int j = 0; j < melSpec.GetLength(1); j++)
+            {
+                if (melSpec[i, j] > maxVal)
+                    maxVal = melSpec[i, j];
+            }
+        }
+
+        float clampFloor = maxVal - 8.0f;
+        for (int i = 0; i < melSpec.GetLength(0); i++)
+        {
+            for (int j = 0; j < melSpec.GetLength(1); j++)
+            {
+                melSpec[i, j] = Math.Max(melSpec[i, j], clampFloor);
+                melSpec[i, j] = (melSpec[i, j] + 4.0f) / 4.0f;
             }
         }
 
@@ -86,7 +107,8 @@ internal sealed class MelSpectrogramProcessor
         {
             for (int j = 0; j < nFrames; j++)
             {
-                mag[i, j] = stft[i, j].Magnitude;
+                var m = stft[i, j].Magnitude;
+                mag[i, j] = m * m;
             }
         }
 

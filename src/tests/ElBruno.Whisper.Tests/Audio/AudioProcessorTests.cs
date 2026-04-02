@@ -21,7 +21,7 @@ public class AudioProcessorTests
         var processor = new AudioProcessor();
         var path = GetTestDataPath(fileName);
 
-        var result = processor.ProcessAudioFile(path);
+        var (result, _) = processor.ProcessAudioFile(path);
 
         Assert.NotNull(result);
         Assert.Equal(ExpectedMelLength, result.Length);
@@ -36,7 +36,7 @@ public class AudioProcessorTests
         var processor = new AudioProcessor();
         var path = GetTestDataPath(fileName);
 
-        var result = processor.ProcessAudioFile(path);
+        var (result, _) = processor.ProcessAudioFile(path);
 
         Assert.All(result, value =>
         {
@@ -55,7 +55,7 @@ public class AudioProcessorTests
         var path = GetTestDataPath(fileName);
 
         using var stream = File.OpenRead(path);
-        var result = processor.ProcessAudioStream(stream);
+        var (result, _) = processor.ProcessAudioStream(stream);
 
         Assert.NotNull(result);
         Assert.Equal(ExpectedMelLength, result.Length);
@@ -70,10 +70,10 @@ public class AudioProcessorTests
         var processor = new AudioProcessor();
         var path = GetTestDataPath(fileName);
 
-        var fileResult = processor.ProcessAudioFile(path);
+        var (fileResult, _) = processor.ProcessAudioFile(path);
 
         using var stream = File.OpenRead(path);
-        var streamResult = processor.ProcessAudioStream(stream);
+        var (streamResult, _) = processor.ProcessAudioStream(stream);
 
         Assert.Equal(fileResult.Length, streamResult.Length);
         for (int i = 0; i < fileResult.Length; i++)
@@ -129,8 +129,22 @@ public class AudioProcessorTests
         var processor = new AudioProcessor();
         var path = GetTestDataPath(fileName);
 
-        var result = processor.ProcessAudioFile(path);
+        var (result, _) = processor.ProcessAudioFile(path);
 
         Assert.Contains(result, value => value != 0.0f);
+    }
+
+    [Theory]
+    [InlineData("test-audio-failing.wav")]
+    [InlineData("test-audio-small.wav")]
+    [InlineData("test-audio-medium.wav")]
+    public void ProcessAudioFile_ReturnsPositiveAudioDuration(string fileName)
+    {
+        var processor = new AudioProcessor();
+        var path = GetTestDataPath(fileName);
+
+        var (_, audioDuration) = processor.ProcessAudioFile(path);
+
+        Assert.True(audioDuration > TimeSpan.Zero, "Audio duration should be positive");
     }
 }

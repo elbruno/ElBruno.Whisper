@@ -10,7 +10,7 @@ internal sealed class AudioProcessor
     private const int FftSize = 400; // 25ms at 16kHz
     private const int HopLength = 160; // 10ms at 16kHz
     private const int MaxFrames = 3000; // 30 seconds
-    private const float MinLogValue = 1e-10f;
+    private const int MaxSamples = TargetSampleRate * 30; // 480,000 samples = 30 seconds
 
     private readonly MelSpectrogramProcessor _melProcessor;
 
@@ -27,7 +27,7 @@ internal sealed class AudioProcessor
     /// <summary>
     /// Process a WAV file into a log-mel spectrogram tensor [1, 80, 3000].
     /// </summary>
-    public float[] ProcessAudioFile(string path)
+    public (float[] MelSpectrogram, TimeSpan AudioDuration) ProcessAudioFile(string path)
     {
         var wav = WavReader.FromFile(path);
         return ProcessAudio(wav);
@@ -36,25 +36,44 @@ internal sealed class AudioProcessor
     /// <summary>
     /// Process a WAV stream into a log-mel spectrogram tensor [1, 80, 3000].
     /// </summary>
-    public float[] ProcessAudioStream(Stream stream)
+    public (float[] MelSpectrogram, TimeSpan AudioDuration) ProcessAudioStream(Stream stream)
     {
         var wav = WavReader.FromStream(stream);
         return ProcessAudio(wav);
     }
 
-    private float[] ProcessAudio(WavReader wav)
+    private (float[] MelSpectrogram, TimeSpan AudioDuration) ProcessAudio(WavReader wav)
     {
         // Convert to mono and resample to 16kHz
         wav.ConvertToMono();
         wav.Resample(TargetSampleRate);
 
+        // Compute audio duration before padding
+        var audioDuration = TimeSpan.FromSeconds((double)wav.Samples.Length / TargetSampleRate);
+
+        // Pad or trim audio to exactly 30 seconds (480,000 samples)
+        // This matches OpenAI Whisper's behavior and ensures STFT produces exactly 3000 frames
+        var paddedAudio = PadOrTrimAudio(wav.Samples, MaxSamples);
+
         // Compute log-mel spectrogram
-        var melSpec = _melProcessor.ComputeMelSpectrogram(wav.Samples);
+        var melSpec = _melProcessor.ComputeMelSpectrogram(paddedAudio);
 
-        // Pad or truncate to 3000 frames (30 seconds)
-        var paddedSpec = PadOrTruncate(melSpec, MaxFrames);
+        // Flatten [80, nFrames] to [1, 80, 3000] with padding if needed
+        var result = PadOrTruncate(melSpec, MaxFrames);
 
-        return paddedSpec;
+        return (result, audioDuration);
+    }
+
+    private static float[] PadOrTrimAudio(float[] samples, int targetLength)
+    {
+        if (samples.Length == targetLength)
+            return samples;
+
+        var result = new float[targetLength];
+        var copyLength = Math.Min(samples.Length, targetLength);
+        Array.Copy(samples, result, copyLength);
+        // Remaining elements are already 0.0f (silence)
+        return result;
     }
 
     private float[] PadOrTruncate(float[,] melSpec, int targetFrames)
@@ -74,10 +93,7 @@ internal sealed class AudioProcessor
                 {
                     result[idx] = melSpec[mel, frame];
                 }
-                else
-                {
-                    result[idx] = MinLogValue; // Pad with very small value (log of near-zero)
-                }
+                // else: remains 0.0f (default) which represents silence after normalization
             }
         }
 

@@ -66,3 +66,18 @@
 - Updated `ElBruno.Whisper.slnx` with both new projects under `/src/samples/`
 - Pattern: Aspire workload not required if templates are already installed; `dotnet new list --tag aspire` confirms availability
 - Key files: `src/samples/BlazorWhisper.AppHost/`, `src/samples/BlazorWhisper.ServiceDefaults/`, `src/samples/BlazorWhisper/Program.cs`
+
+### 2025-07-14 - Fix: Mel Spectrogram Computation to Match Whisper Reference (Issue #5)
+- **Root cause:** Mel spectrogram values were in completely wrong numerical range, causing transcription failures
+- Fixed power spectrum: changed from raw magnitude to squared magnitude (`m * m`) in `ComputeMagnitude()` — matches OpenAI Whisper's `abs() ** 2`
+- Fixed log transform: changed from natural log (`MathF.Log`) to log10 (`MathF.Log10`) in `ComputeMelSpectrogram()`
+- Added Whisper normalization: clamp values to within 8.0 of max, then scale with `(val + 4.0f) / 4.0f` → produces ~[-1, 1] range
+- Pre-pad audio to exactly 30 seconds (480,000 samples) BEFORE STFT computation — ensures STFT produces exactly 3000 frames, matching Python Whisper
+- Fixed padding value in mel domain from `1e-10f` (log of near-zero) to `0.0f` (silence after normalization)
+- Changed AudioProcessor return type to `(float[] MelSpectrogram, TimeSpan AudioDuration)` tuple — reports actual audio duration, not wall-clock processing time
+- Updated WhisperClient to use audio duration from AudioProcessor instead of `DateTime.UtcNow` timing
+- Updated all AudioProcessorTests to handle tuple return values with `var (result, _)` pattern
+- Added `ProcessAudioFile_ReturnsPositiveAudioDuration` test to validate audio duration computation
+- Updated MelSpectrogramTests comment: silent audio values are now in [-1, 1] range after normalization (not log-dominated -23)
+- All 224 tests passing (112 per target framework: net8.0 + net10.0)
+- Key files: `src/ElBruno.Whisper/Audio/MelSpectrogramProcessor.cs`, `src/ElBruno.Whisper/Audio/AudioProcessor.cs`, `src/ElBruno.Whisper/WhisperClient.cs`, test files
