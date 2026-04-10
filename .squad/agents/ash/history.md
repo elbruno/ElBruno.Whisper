@@ -51,7 +51,7 @@
 - Closed issue as "not planned" appropriately
 - Improved community documentation for future users with similar network issues
 
-### Test Audio Files Documentation (2025-01-XX)
+### Test Audio Files Documentation (2026-04-10, commit 1a5a9ee)
 - Created comprehensive `testdata/audio/README.md` with:
   - Table of all 3 test audio files with sizes, durations, descriptions, model compatibility notes
   - Model-specific guidance (tiny.en behavior vs base/small/medium/large)
@@ -81,5 +81,7 @@
   - 109 unit tests pass (all filters applied)
   - Documentation links tested and valid
   - Test file copying works correctly via .csproj
+
+- Design decision documented: Separate documentation files for audio assets (what/where/compatibility) and testing procedures (how to run/CI/CD) following ElBruno convention
 
 ## Learnings

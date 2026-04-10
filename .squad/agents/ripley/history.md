@@ -76,6 +76,14 @@
 - Also excluded integration tests from CI/CD via `--filter "Category!=Integration"` in both `ci.yml` and `publish.yml`
 - Key files: `src/ElBruno.Whisper/Inference/WhisperInferenceSession.cs`, `.github/workflows/ci.yml`, `.github/workflows/publish.yml`
 
+### 2026-04-10T14:25 - Relocated test audio to testdata/audio/ (commit 85dfa95)
+- Moved 3 WAV files from `src/tests/ElBruno.Whisper.Tests/TestData/` to `testdata/audio/` at repo root via `git mv`
+- Updated test `.csproj` with `<Content Include>` + `<Link>` pattern to map files into output `TestData\` (test code paths unchanged)
+- All 109 unit tests pass, zero code changes
+- Decision: Shared test audio assets enable cross-project reuse and improve discoverability
+- Convention: Future test projects should reference `testdata/audio/` instead of duplicating audio files
+- Key files: `testdata/audio/{test-audio-*.wav}`, `src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj`
+
 ### 2025-07-14 - .NET Aspire Orchestration for BlazorWhisper
 - Added Aspire AppHost (`src/samples/BlazorWhisper.AppHost/`) with `Aspire.AppHost.Sdk/13.1.3` targeting net10.0
 - Added ServiceDefaults (`src/samples/BlazorWhisper.ServiceDefaults/`) with OpenTelemetry, health checks, resilience, and service discovery

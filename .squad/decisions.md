@@ -247,6 +247,56 @@ Added .NET Aspire orchestration to BlazorWhisper sample:
 
 ---
 
+### 2026-04-10: Shared test audio assets at repo root
+**Author:** Ripley (Backend Dev)  
+**Status:** Implemented (commit 85dfa95)
+
+**Context:** Test WAV files lived inside the test project at `src/tests/ElBruno.Whisper.Tests/TestData/`. Bruno requested better discoverability and cross-project reuse. Test data assets aren't source code, so living outside `src/` is appropriate.
+
+**Decision:** Relocated all test audio files to `testdata/audio/` at repository root. The test `.csproj` uses `<Content Include>` with `<Link>` to map them into the `TestData\` output folder, so test code paths are unchanged.
+
+**Structure:**
+```
+testdata/
+  audio/
+    test-audio-small.wav    (201 KB)
+    test-audio-medium.wav   (347 KB)
+    test-audio-failing.wav  (345 KB) — triggered Issue #7
+```
+
+**Convention:** Future test projects should reference `testdata/audio/` instead of duplicating WAV files. Use `<Content Include>` with `<Link>` in .csproj to map shared assets into project-local output paths. `git mv` preserves rename history for binary assets.
+
+**Consequences:**
+- ✅ Audio assets discoverable at repo root
+- ✅ Any future test project can reference the same files
+- ✅ All 109 tests pass, zero code changes needed
+- ✅ Git history preserved via rename detection
+
+---
+
+### 2026-04-10: Test audio documentation strategy
+**Author:** Ash (DevRel)  
+**Status:** Implemented (commit 1a5a9ee)
+
+**Context:** Created comprehensive documentation for the test audio files moved to `testdata/audio/` directory. This makes the testing resources discoverable and reusable by other libraries and applications.
+
+**Decision:** Implement two-layer documentation following ElBruno convention of per-directory READMEs:
+1. `testdata/audio/README.md` — Audio-specific (what they are, compatibility, usage examples)
+2. `docs/testing.md` — General testing guide (how to run tests, organization, CI/CD)
+
+**Deliverables:**
+- **testdata/audio/README.md:** File inventory, model compatibility, C# examples, test coverage, known issues (Issue #7 reference), licensing
+- **docs/testing.md:** Test categories, data structure, running tests with filter commands, CI/CD, troubleshooting, templates
+- **README.md update:** Added "Testing" section with quick commands and links
+
+**Consequences:**
+- ✅ Audio assets documented with model compatibility matrix
+- ✅ Testing procedures discoverable and well-explained
+- ✅ Honest about model limitations (tiny model may return empty for medium/large files)
+- ✅ Clear path to new testers (quick start commands, filter options)
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus
