@@ -149,3 +149,10 @@
 - All 109 non-integration tests pass on both net8.0 and net10.0
 - Purpose: makes audio assets discoverable at repo root and reusable by future test projects
 - Key files: `testdata/audio/`, `src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj`
+
+### 2026-04-10T14:38 - Release v0.1.6 orchestration
+- Version bump 0.1.5 → 0.1.6 in ElBruno.Whisper.csproj (Ripley)
+- Release build passed, all 109 unit tests passing
+- Git commit and tag v0.1.6 created and pushed (Ripley)
+- Release notes drafted and GitHub release v0.1.6 created with full notes (Coordinator)
+- Status: Live on GitHub

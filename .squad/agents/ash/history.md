@@ -84,4 +84,9 @@
 
 - Design decision documented: Separate documentation files for audio assets (what/where/compatibility) and testing procedures (how to run/CI/CD) following ElBruno convention
 
+### 2026-04-10T14:38 - Release v0.1.6 coordination
+- Release notes drafted for v0.1.6 (encountered path restriction, delegated to Coordinator)
+- Coordinator successfully created GitHub release with full notes
+- Status: v0.1.6 live
+
 ## Learnings
