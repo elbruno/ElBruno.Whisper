@@ -115,7 +115,9 @@ internal sealed class WhisperInferenceSession : IDisposable
         for (int step = 0; step < maxTokens; step++)
         {
             var isFirstStep = step == 0;
-            var useCacheBranch = !isFirstStep;
+            // WORKAROUND: Always use cache branch to avoid ONNX model bug with empty encoder cache
+            // The model has a Reshape bug when use_cache_branch=false with corrected mel spectrograms
+            var useCacheBranch = true;
 
             // First step: full initial sequence. Cached steps: only the last generated token.
             long[] inputIds;
@@ -189,12 +191,13 @@ internal sealed class WhisperInferenceSession : IDisposable
             }
             else
             {
-                // Empty cache: create zero tensor with dynamic dims resolved to 1
-                // Using 1 (not 0) for all dynamic dims avoids ONNX Reshape failures
+                // Empty cache: create zero-filled tensors with all dynamic or zero dims=1
+                // Fixes both ONNX dynamic dimensions (<0) and onnx-community model export bug (dims=0)
+                // Without this, encoder cache tensors with shape [6,0,64] fail to reshape to [1,6,64,64]
                 var shape = (int[])slot.MetadataShape.Clone();
                 for (int d = 0; d < shape.Length; d++)
                 {
-                    if (shape[d] < 0)
+                    if (shape[d] <= 0)
                         shape[d] = 1;
                 }
 
@@ -211,6 +214,7 @@ internal sealed class WhisperInferenceSession : IDisposable
     /// <summary>
     /// Extracts present.* key-value outputs from decoder results for caching.
     /// Copies tensor data so the results collection can be safely disposed.
+    /// Ensures proper 4D shape for KV cache tensors.
     /// </summary>
     private static Dictionary<string, (float[] Data, int[] Shape)> ExtractPresentOutputs(
         IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results)
@@ -223,7 +227,30 @@ internal sealed class WhisperInferenceSession : IDisposable
                 continue;
 
             var tensor = result.AsTensor<float>();
-            cache[result.Name] = (tensor.ToArray(), tensor.Dimensions.ToArray());
+            var dims = tensor.Dimensions.ToArray();
+            var data = tensor.ToArray();
+            
+            // KV cache must be 4D: [batch, num_heads, seq_len, head_dim]
+            // Fix common ONNX model output issues:
+            // 1. Squeezed batch dimension (3D output) → prepend batch=1
+            // 2. Zero batch dimension (encoder cache bug) → fix to batch=1 with proper data
+            if (dims.Length == 3)
+            {
+                dims = new[] { 1 }.Concat(dims).ToArray();
+            }
+            else if (dims.Length == 4 && dims[0] == 0)
+            {
+                // Fix encoder cache batch=0 bug: model outputs [0,heads,seq,dim] with 0 elements
+                // Change to [1,heads,seq,dim] and allocate proper zero-filled data array
+                dims[0] = 1;
+                var requiredElements = dims[0] * dims[1] * dims[2] * dims[3];
+                if (data.Length == 0 && requiredElements > 0)
+                {
+                    data = new float[requiredElements]; // Zero-filled
+                }
+            }
+            
+            cache[result.Name] = (data, dims);
         }
 
         return cache;
