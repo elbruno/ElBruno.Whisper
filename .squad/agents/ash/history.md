@@ -41,4 +41,14 @@
    - Push to NuGet.org using API key
    - Skip duplicate versions
 
+### Issue #8 Community Support (2026-04-10)
+- Analyzed user's "Connection refused" error after WAV upload
+- Determined root cause: Environmental network issue, not library defect (model download blocked)
+- Posted detailed troubleshooting comment with:
+  - Network/firewall diagnostic steps
+  - Pre-download and offline cache options
+  - Clear explanation that library code is functioning correctly
+- Closed issue as "not planned" appropriately
+- Improved community documentation for future users with similar network issues
+
 ## Learnings
