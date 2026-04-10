@@ -26,3 +26,10 @@
   - Tests: src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj
   - Sample: src/samples/HelloWhisper/HelloWhisper.csproj
   - Images: images/nuget_logo.png (for NuGet package icon)
+
+### 2026-04-10: Issue #7 Analysis and Triage
+- Identified root cause: ONNX cache dimension normalization logic uses `shape[d] < 0` but onnx-community models export encoder cache tensors with explicit 0-length dimensions
+- Invalid shapes like `{6,0,64}` cause reshape failures to 4D tensors `{1,6,64,64}` in decoder
+- Pattern discovered: `ExtractPresentOutputs()` already handled zero-dimension batch sizes, extending to cache initialization achieves consistency
+- Risk assessment: Low — dummy cache data (~36KB) overwritten on first step, backward-compatible with models without zero-dimension issue
+- All 218 existing tests pass with 1-line fix

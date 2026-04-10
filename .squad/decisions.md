@@ -138,6 +138,165 @@
 - All original tests still pass
 - New files: `Inference/WhisperInferenceSessionTests.cs`, `Audio/AudioProcessorTests.cs`, `WhisperClientTests.cs`, `Integration/WhisperTranscriptionTests.cs`
 
+### 2025-07-14: Handle Zero-Dimension Cache Tensors in ONNX Inference
+**Author:** Ripley (Backend Dev)  
+**Status:** Implemented (PR #9)  
+**Related Issue:** #7
+
+**Context:**  
+The onnx-community Whisper model exports encoder cross-attention cache tensors with a 0-length dimension. This is a known bug in the model export process. When `WhisperInferenceSession` initializes the KV cache for the first decoder step, it reads the tensor shape from the model metadata. The `AddCacheInputs()` method normalized dynamic dimensions (negative values like `-1`) with `1`, but left explicit `0` dimensions unchanged, producing invalid shapes like `{6,0,64}` that fail ONNX reshape operations.
+
+**Decision:**  
+Extended dimension normalization to treat zero-length dimensions the same as dynamic dimensions in `AddCacheInputs()`:
+- Changed: `if (shape[d] < 0)` → `if (shape[d] <= 0)`
+
+**Rationale:**
+1. **Consistency:** `ExtractPresentOutputs()` already handled zero-dimension batch sizes (`dims[0] == 0`)
+2. **Safety:** ONNX tensors should never have 0-length dimensions; graph validation happens regardless
+3. **Low Risk:** Dummy cache data (~36KB) is overwritten on first decoder step
+4. **Model Compatibility:** Works around onnx-community export bug without model regeneration
+
+**Consequences:**
+- All 218 unit tests pass
+- Handles both dynamic and zero dimensions
+- Code remains safe if future model versions fix the export bug
+- Future maintainers have clear documentation of both cases
+
+---
+
+### 2025-07-14: Blazor JS Interop — Uint8Array for byte[] Parameters
+**Author:** Ripley (Backend Dev)  
+**Status:** Implemented
+
+**Context:**  
+BlazorWhisper's "Stop Recording" button silently failed. The `audioRecorder.js` wrapped WAV data with `Array.from(wavBytes)` before passing to `invokeMethodAsync`. This converted `Uint8Array` to a plain JS array `[82, 73, 70, ...]`, which `System.Text.Json` cannot deserialize to `byte[]` (expects base64 string). Errors were swallowed because calls weren't `await`ed.
+
+**Decision:**  
+When passing binary data from JavaScript to Blazor C# methods expecting `byte[]`:
+1. **Always pass `Uint8Array` directly** — never wrap with `Array.from()`
+2. **Always `await` `invokeMethodAsync`** calls so errors surface in `try/catch`
+
+**Files Changed:**
+- `src/samples/BlazorWhisper/wwwroot/js/audioRecorder.js` — 3 call sites fixed
+
+**Consequences:**
+- Stop Recording now delivers WAV data correctly to transcription pipeline
+- Realtime recording chunks fixed
+- JS→C# interop errors now logged instead of silently swallowed
+
+---
+
+### 2025-07-14: Mel Spectrogram Must Match OpenAI Whisper Reference
+**Author:** Ripley (Backend Dev)  
+**Status:** Implemented  
+**Affects:** Core audio processing pipeline
+
+**Context:**  
+ElBruno.Whisper produced wrong transcriptions for all audio because mel spectrogram preprocessing didn't match OpenAI Whisper's reference implementation (`whisper/audio.py`).
+
+**Decision:**  
+Mel spectrogram pipeline MUST exactly match OpenAI Whisper preprocessing:
+1. **Power spectrum** (not magnitude): `abs(stft) ** 2`
+2. **Log base 10** (not natural log): `log10()`
+3. **Dynamic range compression**: `max(log_spec, max_value - 8.0)`
+4. **Normalization**: `(log_spec + 4.0) / 4.0`
+5. **Periodic Hann window**: Formula `2πi/N` not `2πi/(N-1)`
+6. **Padding value**: `0.0f` for normalized silence
+
+**Rationale:**  
+- Whisper models trained on specific mel spectrogram values
+- Any deviation causes degraded or completely wrong transcriptions
+- Reference implementation in PyTorch is ground truth
+- ONNX models expect exact preprocessing steps
+
+**Implementation:**
+- `src/ElBruno.Whisper/Audio/MelSpectrogramProcessor.cs` — Fixed power, log10, normalization, Hann window
+- `src/ElBruno.Whisper/Audio/AudioProcessor.cs` — Fixed padding value
+- All 37 audio tests pass; mel values in correct range
+
+**Consequences:**
+- ✅ Transcriptions now accurate (when ONNX models correct)
+- ✅ Matches OpenAI Whisper standard
+- ⚠️ Integration tests revealed ONNX decoder reshape errors (separate issue, now fixed in PR #9)
+
+---
+
+### 2025-07-14: .NET Aspire Orchestration for BlazorWhisper
+**Author:** Ripley (Backend Dev)  
+**Status:** Implemented
+
+**Context:**  
+Bruno wanted observability for BlazorWhisper after WAV upload crash (fixed by Issue #7). Aspire provides dashboard with distributed tracing, logging, health checks.
+
+**Decision:**  
+Added .NET Aspire orchestration to BlazorWhisper sample:
+1. **BlazorWhisper.AppHost** — Aspire AppHost (Aspire.AppHost.Sdk/13.1.3, net10.0)
+2. **BlazorWhisper.ServiceDefaults** — OpenTelemetry, health checks, resilience
+3. **BlazorWhisper upgraded to net10.0** — Required for ServiceDefaults compatibility (library already supports net10.0)
+
+**Key Details:**
+- AppHost entry point is `AppHost.cs` (Aspire template convention)
+- ServiceDefaults uses OpenTelemetry v1.14.0
+- Health endpoints (`/health`, `/alive`) only in Development
+- BlazorWhisper can still run standalone without AppHost
+
+**Consequences:**
+- ✅ Full observability via Aspire dashboard for debugging
+- ✅ Standard resilience patterns ready for future services
+- ⚠️ BlazorWhisper now targets net10.0 (acceptable, SDK available)
+
+---
+
+### 2026-04-10: Shared test audio assets at repo root
+**Author:** Ripley (Backend Dev)  
+**Status:** Implemented (commit 85dfa95)
+
+**Context:** Test WAV files lived inside the test project at `src/tests/ElBruno.Whisper.Tests/TestData/`. Bruno requested better discoverability and cross-project reuse. Test data assets aren't source code, so living outside `src/` is appropriate.
+
+**Decision:** Relocated all test audio files to `testdata/audio/` at repository root. The test `.csproj` uses `<Content Include>` with `<Link>` to map them into the `TestData\` output folder, so test code paths are unchanged.
+
+**Structure:**
+```
+testdata/
+  audio/
+    test-audio-small.wav    (201 KB)
+    test-audio-medium.wav   (347 KB)
+    test-audio-failing.wav  (345 KB) — triggered Issue #7
+```
+
+**Convention:** Future test projects should reference `testdata/audio/` instead of duplicating WAV files. Use `<Content Include>` with `<Link>` in .csproj to map shared assets into project-local output paths. `git mv` preserves rename history for binary assets.
+
+**Consequences:**
+- ✅ Audio assets discoverable at repo root
+- ✅ Any future test project can reference the same files
+- ✅ All 109 tests pass, zero code changes needed
+- ✅ Git history preserved via rename detection
+
+---
+
+### 2026-04-10: Test audio documentation strategy
+**Author:** Ash (DevRel)  
+**Status:** Implemented (commit 1a5a9ee)
+
+**Context:** Created comprehensive documentation for the test audio files moved to `testdata/audio/` directory. This makes the testing resources discoverable and reusable by other libraries and applications.
+
+**Decision:** Implement two-layer documentation following ElBruno convention of per-directory READMEs:
+1. `testdata/audio/README.md` — Audio-specific (what they are, compatibility, usage examples)
+2. `docs/testing.md` — General testing guide (how to run tests, organization, CI/CD)
+
+**Deliverables:**
+- **testdata/audio/README.md:** File inventory, model compatibility, C# examples, test coverage, known issues (Issue #7 reference), licensing
+- **docs/testing.md:** Test categories, data structure, running tests with filter commands, CI/CD, troubleshooting, templates
+- **README.md update:** Added "Testing" section with quick commands and links
+
+**Consequences:**
+- ✅ Audio assets documented with model compatibility matrix
+- ✅ Testing procedures discoverable and well-explained
+- ✅ Honest about model limitations (tiny model may return empty for medium/large files)
+- ✅ Clear path to new testers (quick start commands, filter options)
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus
