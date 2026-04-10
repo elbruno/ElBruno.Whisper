@@ -132,3 +132,12 @@
 - All 218 unit tests pass, no behavior change since the ~36KB dummy cache data gets overwritten on first decoder step
 - Key file: `src/ElBruno.Whisper/Inference/WhisperInferenceSession.cs` (line 199)
 - Pull request: #9
+
+### 2025-07-14 - Reorganize test audio assets to testdata/audio/
+- Moved 3 WAV test files from `src/tests/ElBruno.Whisper.Tests/TestData/` to `testdata/audio/` (repo root)
+- Used `git mv` to preserve file history (Git detected 100% renames)
+- Updated .csproj: replaced `<None Update="TestData\**\*">` with `<Content Include="..\..\..\testdata\audio\*">` using `<Link>TestData\%(Filename)%(Extension)</Link>` to maintain backward-compatible output path
+- Test code unchanged — files still land in `TestData\` in the build output directory
+- All 109 non-integration tests pass on both net8.0 and net10.0
+- Purpose: makes audio assets discoverable at repo root and reusable by future test projects
+- Key files: `testdata/audio/`, `src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj`

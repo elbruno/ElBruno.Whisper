@@ -161,6 +161,8 @@ For detailed troubleshooting, see [docs](docs/).
 - [Getting Started](docs/getting-started.md) — installation, first steps, configuration
 - [API Reference](docs/api-reference.md) — full API documentation
 - [Architecture](docs/architecture.md) — design decisions and internal structure
+- [Testing Guide](docs/testing.md) — running tests, test organization, CI/CD pipeline
+- [Test Audio Files](testdata/audio/README.md) — audio resources for testing and transcription validation
 - [Image Prompts](docs/image-prompts.md) — prompts for generating blog and social media images
 - [Publishing](docs/publishing.md) — NuGet package publishing with OIDC
 
@@ -170,8 +172,24 @@ For detailed troubleshooting, see [docs](docs/).
 git clone https://github.com/elbruno/ElBruno.Whisper
 cd ElBruno.Whisper
 dotnet build ElBruno.Whisper.slnx
+dotnet test ElBruno.Whisper.slnx --filter "Category!=Integration"
+```
+
+## Testing
+
+The repository includes comprehensive unit and integration tests:
+
+**Quick test run (unit tests, no model download):**
+```bash
+dotnet test ElBruno.Whisper.slnx --filter "Category!=Integration"
+```
+
+**Full test run (includes integration with real models):**
+```bash
 dotnet test ElBruno.Whisper.slnx
 ```
+
+Test audio files are provided in [`testdata/audio/`](testdata/audio/) for validation and transcription testing. For details, see the [Testing Guide](docs/testing.md).
 
 ## 🤝 Contributing
 
