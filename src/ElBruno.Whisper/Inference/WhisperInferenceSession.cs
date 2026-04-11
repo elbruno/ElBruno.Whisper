@@ -5,12 +5,14 @@ namespace ElBruno.Whisper.Inference;
 
 /// <summary>
 /// ONNX Runtime inference session for Whisper encoder-decoder pipeline.
-/// Supports Optimum-style merged decoder with use_cache_branch and past key-value caching.
+/// Uses a non-merged decoder for the first step (computes fresh KV from encoder output)
+/// and an Optimum-style merged decoder with KV caching for subsequent steps.
 /// </summary>
 internal sealed class WhisperInferenceSession : IDisposable
 {
     private readonly InferenceSession _encoderSession;
-    private readonly InferenceSession _decoderSession;
+    private readonly InferenceSession _firstStepDecoderSession;
+    private readonly InferenceSession _cachedDecoderSession;
     private readonly int _numDecoderLayers;
     private readonly int _encoderDimension;
     private readonly bool _hasCacheBranch;
@@ -41,21 +43,37 @@ internal sealed class WhisperInferenceSession : IDisposable
         };
 
         _encoderSession = new InferenceSession(encoderPath, options);
-        _decoderSession = new InferenceSession(decoderPath, options);
 
-        _hasCacheBranch = _decoderSession.InputMetadata.ContainsKey("use_cache_branch");
+        // Load the non-merged decoder for the first step (no cache inputs required).
+        // This cleanly avoids a Reshape bug in the merged model's conditional branch
+        // that fails with empty/initial cache tensors.
+        var decoderDir = Path.GetDirectoryName(decoderPath)!;
+        var firstStepPath = Path.Combine(decoderDir, "decoder_model.onnx");
+        if (File.Exists(firstStepPath))
+        {
+            _firstStepDecoderSession = new InferenceSession(firstStepPath, options);
+        }
+        else
+        {
+            // Fall back to merged decoder if non-merged is not available
+            _firstStepDecoderSession = null!;
+        }
+
+        _cachedDecoderSession = new InferenceSession(decoderPath, options);
+
+        _hasCacheBranch = _cachedDecoderSession.InputMetadata.ContainsKey("use_cache_branch");
         _cacheSlots = DiscoverCacheSlots();
     }
 
     /// <summary>
-    /// Discover past_key_values inputs from decoder model metadata at construction time.
+    /// Discover past_key_values inputs from cached decoder model metadata at construction time.
     /// This makes the session work across all Whisper model sizes without hardcoding.
     /// </summary>
     private List<CacheSlotInfo> DiscoverCacheSlots()
     {
         var slots = new List<CacheSlotInfo>();
 
-        foreach (var kvp in _decoderSession.InputMetadata)
+        foreach (var kvp in _cachedDecoderSession.InputMetadata)
         {
             if (!kvp.Key.StartsWith("past_key_values.", StringComparison.Ordinal))
                 continue;
@@ -73,15 +91,12 @@ internal sealed class WhisperInferenceSession : IDisposable
     /// <summary>
     /// Run inference on audio features.
     /// </summary>
-    /// <param name="melSpectrogram">Log-mel spectrogram [1, 80, 3000]</param>
-    /// <param name="initialTokens">Initial decoder tokens (e.g., special tokens)</param>
-    /// <param name="maxTokens">Maximum tokens to generate</param>
-    /// <param name="eotToken">End-of-text token ID</param>
-    /// <returns>Generated token IDs</returns>
-    public int[] Inference(float[] melSpectrogram, int[] initialTokens, int maxTokens, int eotToken)
+    public int[] Inference(float[] melSpectrogram, int[] initialTokens, int maxTokens, int eotToken,
+        int[]? suppressTokens = null, int[]? beginSuppressTokens = null)
     {
         var encoderHiddenStates = RunEncoder(melSpectrogram);
-        var tokens = RunDecoder(encoderHiddenStates, initialTokens, maxTokens, eotToken);
+        var tokens = RunDecoder(encoderHiddenStates, initialTokens, maxTokens, eotToken,
+            suppressTokens, beginSuppressTokens);
         return tokens;
     }
 
@@ -97,7 +112,8 @@ internal sealed class WhisperInferenceSession : IDisposable
         return results.First().AsEnumerable<float>().ToArray();
     }
 
-    private int[] RunDecoder(float[] encoderHiddenStates, int[] initialTokens, int maxTokens, int eotToken)
+    private int[] RunDecoder(float[] encoderHiddenStates, int[] initialTokens, int maxTokens, int eotToken,
+        int[]? suppressTokens = null, int[]? beginSuppressTokens = null)
     {
         var tokens = new List<int>(initialTokens);
 
@@ -112,12 +128,14 @@ internal sealed class WhisperInferenceSession : IDisposable
         // KV cache: maps present.* output name → (data, shape) for feeding back as past_key_values.*
         Dictionary<string, (float[] Data, int[] Shape)>? kvCache = null;
 
-        for (int step = 0; step < maxTokens; step++)
+        // Whisper's positional embedding supports at most 448 total tokens.
+        // Cap maxTokens to avoid exceeding the model's context window.
+        const int maxModelPositions = 448;
+        var maxGenerateSteps = Math.Min(maxTokens, maxModelPositions - initialTokens.Length);
+
+        for (int step = 0; step < maxGenerateSteps; step++)
         {
             var isFirstStep = step == 0;
-            // WORKAROUND: Always use cache branch to avoid ONNX model bug with empty encoder cache
-            // The model has a Reshape bug when use_cache_branch=false with corrected mel spectrograms
-            var useCacheBranch = true;
 
             // First step: full initial sequence. Cached steps: only the last generated token.
             long[] inputIds;
@@ -133,50 +151,119 @@ internal sealed class WhisperInferenceSession : IDisposable
                 seqLen = 1;
             }
 
-            var decoderInputs = new List<NamedOnnxValue>
-            {
-                NamedOnnxValue.CreateFromTensor("input_ids",
-                    new DenseTensor<long>(inputIds, new[] { 1, seqLen })),
-                NamedOnnxValue.CreateFromTensor("encoder_hidden_states", encoderTensor)
-            };
+            IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results;
 
-            // Add use_cache_branch 1D bool tensor if the merged decoder expects it
-            if (_hasCacheBranch)
+            if (isFirstStep && _firstStepDecoderSession != null)
             {
-                decoderInputs.Add(NamedOnnxValue.CreateFromTensor("use_cache_branch",
-                    new DenseTensor<bool>(new[] { useCacheBranch }, new[] { 1 })));
+                // First step: use the non-merged decoder which computes fresh KV
+                // from encoder_hidden_states without requiring past_key_values inputs.
+                results = RunFirstStepDecoder(inputIds, seqLen, encoderTensor);
+            }
+            else
+            {
+                // Subsequent steps (or fallback): use merged decoder with KV cache
+                results = RunCachedDecoder(inputIds, seqLen, encoderTensor, kvCache, isFirstStep);
             }
 
-            // Add past key-value cache inputs (empty on first step, cached on subsequent)
-            AddCacheInputs(decoderInputs, kvCache);
+            using (results)
+            {
+                // Extract logits and greedy-decode the last token position
+                var logitsOutput = results.First(r => r.Name == "logits");
+                var logits = logitsOutput.AsEnumerable<float>().ToArray();
+                var vocabSize = logits.Length / seqLen;
+                var lastTokenLogits = new float[vocabSize];
+                Array.Copy(logits, (seqLen - 1) * vocabSize, lastTokenLogits, 0, vocabSize);
 
-            using var results = _decoderSession.Run(decoderInputs);
+                // Suppress specified tokens (e.g., timestamp tokens when noTimestamps)
+                if (suppressTokens != null)
+                {
+                    foreach (var t in suppressTokens)
+                    {
+                        if (t >= 0 && t < vocabSize)
+                            lastTokenLogits[t] = float.NegativeInfinity;
+                    }
+                }
 
-            // Extract logits and greedy-decode the last token position
-            var logitsOutput = results.First(r => r.Name == "logits");
-            var logits = logitsOutput.AsEnumerable<float>().ToArray();
-            var vocabSize = logits.Length / seqLen;
-            var lastTokenLogits = new float[vocabSize];
-            Array.Copy(logits, (seqLen - 1) * vocabSize, lastTokenLogits, 0, vocabSize);
+                // At the first generated position, apply begin_suppress_tokens.
+                // This prevents the model from immediately outputting blank/EOT.
+                if (isFirstStep && beginSuppressTokens != null)
+                {
+                    foreach (var t in beginSuppressTokens)
+                    {
+                        if (t >= 0 && t < vocabSize)
+                            lastTokenLogits[t] = float.NegativeInfinity;
+                    }
+                }
 
-            var nextToken = ArgMax(lastTokenLogits);
+                var nextToken = ArgMax(lastTokenLogits);
 
-            // Capture present.* outputs as cache for next step
-            kvCache = ExtractPresentOutputs(results);
+                // Update KV cache from present.* outputs. On the first step, all slots
+                // are populated. On subsequent steps, only decoder self-attention KV is
+                // updated (encoder cross-attention outputs are empty with batch=0 because
+                // the cache branch passes them through unchanged).
+                kvCache = ExtractPresentOutputs(results, kvCache);
 
-            if (nextToken == eotToken)
-                break;
+                if (nextToken == eotToken)
+                    break;
 
-            tokens.Add(nextToken);
+                tokens.Add(nextToken);
+            }
         }
 
         return tokens.ToArray();
     }
 
     /// <summary>
+    /// Runs the non-merged decoder for the first step. This model takes only input_ids and
+    /// encoder_hidden_states, computes fresh decoder self-attention and encoder cross-attention
+    /// KV values, and outputs them as present.* for caching in subsequent steps.
+    /// </summary>
+    private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> RunFirstStepDecoder(
+        long[] inputIds, int seqLen, DenseTensor<float> encoderTensor)
+    {
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor("input_ids",
+                new DenseTensor<long>(inputIds, new[] { 1, seqLen })),
+            NamedOnnxValue.CreateFromTensor("encoder_hidden_states", encoderTensor)
+        };
+
+        return _firstStepDecoderSession.Run(inputs);
+    }
+
+    /// <summary>
+    /// Runs the merged decoder with KV cache for subsequent steps (or as fallback for the first
+    /// step when the non-merged decoder is not available).
+    /// </summary>
+    private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> RunCachedDecoder(
+        long[] inputIds, int seqLen, DenseTensor<float> encoderTensor,
+        Dictionary<string, (float[] Data, int[] Shape)>? kvCache, bool isFirstStep)
+    {
+        // When falling back to merged decoder for first step, use_cache_branch must be true
+        // with minimal cache tensors to avoid the model's Reshape bug with empty cache.
+        var useCacheBranch = !isFirstStep || _firstStepDecoderSession == null;
+
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor("input_ids",
+                new DenseTensor<long>(inputIds, new[] { 1, seqLen })),
+            NamedOnnxValue.CreateFromTensor("encoder_hidden_states", encoderTensor)
+        };
+
+        if (_hasCacheBranch)
+        {
+            inputs.Add(NamedOnnxValue.CreateFromTensor("use_cache_branch",
+                new DenseTensor<bool>(new[] { useCacheBranch }, new[] { 1 })));
+        }
+
+        AddCacheInputs(inputs, kvCache);
+
+        return _cachedDecoderSession.Run(inputs);
+    }
+
+    /// <summary>
     /// Adds past key-value tensors to decoder inputs.
-    /// First step (cache is null): provides zero-length tensors so the model graph is satisfied.
-    /// Subsequent steps: feeds cached present values from the previous step.
+    /// Uses cached values when available, or creates minimal dummy tensors for graph satisfaction.
     /// </summary>
     private void AddCacheInputs(
         List<NamedOnnxValue> inputs,
@@ -191,9 +278,8 @@ internal sealed class WhisperInferenceSession : IDisposable
             }
             else
             {
-                // Empty cache: create zero-filled tensors with all dynamic or zero dims=1
-                // Fixes both ONNX dynamic dimensions (<0) and onnx-community model export bug (dims=0)
-                // Without this, encoder cache tensors with shape [6,0,64] fail to reshape to [1,6,64,64]
+                // Create minimal tensors with dim=1 for all dynamic/zero dims.
+                // Required to satisfy the model's Reshape ops in the graph.
                 var shape = (int[])slot.MetadataShape.Clone();
                 for (int d = 0; d < shape.Length; d++)
                 {
@@ -214,12 +300,16 @@ internal sealed class WhisperInferenceSession : IDisposable
     /// <summary>
     /// Extracts present.* key-value outputs from decoder results for caching.
     /// Copies tensor data so the results collection can be safely disposed.
-    /// Ensures proper 4D shape for KV cache tensors.
+    /// Preserves existing cache entries when the model outputs empty tensors (batch=0),
+    /// which happens for encoder cross-attention KV when use_cache_branch=true.
     /// </summary>
     private static Dictionary<string, (float[] Data, int[] Shape)> ExtractPresentOutputs(
-        IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results)
+        IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results,
+        Dictionary<string, (float[] Data, int[] Shape)>? existingCache)
     {
-        var cache = new Dictionary<string, (float[] Data, int[] Shape)>();
+        var cache = existingCache != null
+            ? new Dictionary<string, (float[] Data, int[] Shape)>(existingCache)
+            : new Dictionary<string, (float[] Data, int[] Shape)>();
 
         foreach (var result in results)
         {
@@ -228,26 +318,18 @@ internal sealed class WhisperInferenceSession : IDisposable
 
             var tensor = result.AsTensor<float>();
             var dims = tensor.Dimensions.ToArray();
+
+            // Skip empty outputs (batch=0) — these are encoder KV pass-throughs
+            // when use_cache_branch=true. Keep the existing cache entry instead.
+            if (dims.Length >= 1 && dims[0] == 0)
+                continue;
+
             var data = tensor.ToArray();
             
             // KV cache must be 4D: [batch, num_heads, seq_len, head_dim]
-            // Fix common ONNX model output issues:
-            // 1. Squeezed batch dimension (3D output) → prepend batch=1
-            // 2. Zero batch dimension (encoder cache bug) → fix to batch=1 with proper data
             if (dims.Length == 3)
             {
                 dims = new[] { 1 }.Concat(dims).ToArray();
-            }
-            else if (dims.Length == 4 && dims[0] == 0)
-            {
-                // Fix encoder cache batch=0 bug: model outputs [0,heads,seq,dim] with 0 elements
-                // Change to [1,heads,seq,dim] and allocate proper zero-filled data array
-                dims[0] = 1;
-                var requiredElements = dims[0] * dims[1] * dims[2] * dims[3];
-                if (data.Length == 0 && requiredElements > 0)
-                {
-                    data = new float[requiredElements]; // Zero-filled
-                }
             }
             
             cache[result.Name] = (data, dims);
@@ -278,7 +360,8 @@ internal sealed class WhisperInferenceSession : IDisposable
         if (!_disposed)
         {
             _encoderSession?.Dispose();
-            _decoderSession?.Dispose();
+            _firstStepDecoderSession?.Dispose();
+            _cachedDecoderSession?.Dispose();
             _disposed = true;
         }
     }

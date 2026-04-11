@@ -2,6 +2,8 @@ namespace ElBruno.Whisper.Audio;
 
 /// <summary>
 /// Computes log-mel spectrograms using STFT and mel filterbanks.
+/// Matches the OpenAI Whisper reference implementation (centered STFT,
+/// periodic Hann window, slaney-normalized mel filterbank).
 /// </summary>
 internal sealed class MelSpectrogramProcessor
 {
@@ -11,6 +13,8 @@ internal sealed class MelSpectrogramProcessor
     private readonly int _hopLength;
     private readonly float[] _window;
     private readonly float[,] _melFilterbank;
+    private readonly double[,] _dftCosTable;
+    private readonly double[,] _dftSinTable;
 
     public MelSpectrogramProcessor(int sampleRate, int nMels, int nFft, int hopLength)
     {
@@ -18,17 +22,31 @@ internal sealed class MelSpectrogramProcessor
         _nMels = nMels;
         _nFft = nFft;
         _hopLength = hopLength;
-        _window = CreateHannWindow(nFft);
+        _window = CreatePeriodicHannWindow(nFft);
         _melFilterbank = CreateMelFilterbank(sampleRate, nFft, nMels);
+
+        // Pre-compute DFT twiddle factors for exact nFft-point DFT
+        int nBins = nFft / 2 + 1;
+        _dftCosTable = new double[nBins, nFft];
+        _dftSinTable = new double[nBins, nFft];
+        for (int k = 0; k < nBins; k++)
+        {
+            for (int n = 0; n < nFft; n++)
+            {
+                double angle = -2.0 * Math.PI * k * n / nFft;
+                _dftCosTable[k, n] = Math.Cos(angle);
+                _dftSinTable[k, n] = Math.Sin(angle);
+            }
+        }
     }
 
     public float[,] ComputeMelSpectrogram(float[] audio)
     {
-        // Compute STFT
-        var stft = ComputeStft(audio);
+        // Centered STFT matching torch.stft(audio, N_FFT, HOP_LENGTH, window=window, center=True)
+        var stft = ComputeCenteredStft(audio);
 
-        // Compute magnitude spectrogram
-        var magSpec = ComputeMagnitude(stft);
+        // Compute power spectrogram (magnitude squared)
+        var magSpec = ComputePowerSpectrum(stft);
 
         // Apply mel filterbank
         var melSpec = ApplyMelFilterbank(magSpec);
@@ -66,53 +84,55 @@ internal sealed class MelSpectrogramProcessor
         return melSpec;
     }
 
-    private Complex[,] ComputeStft(float[] audio)
+    /// <summary>
+    /// Centered STFT: pad audio by nFft/2 on each side, compute STFT, then drop the last frame.
+    /// This matches torch.stft(audio, N_FFT, HOP_LENGTH, window=window, center=True) followed
+    /// by stft[..., :-1] in the Whisper reference.
+    /// </summary>
+    private float[,] ComputeCenteredStft(float[] audio)
     {
-        int nFrames = 1 + (audio.Length - _nFft) / _hopLength;
-        if (nFrames < 0) nFrames = 0;
+        int pad = _nFft / 2;
+        var padded = new float[audio.Length + 2 * pad];
+        Array.Copy(audio, 0, padded, pad, audio.Length);
 
-        var stft = new Complex[_nFft / 2 + 1, nFrames];
+        int nBins = _nFft / 2 + 1;
+        int totalFrames = 1 + (padded.Length - _nFft) / _hopLength;
+        // Drop last frame to match Whisper's stft[..., :-1]
+        int nFrames = totalFrames > 0 ? totalFrames - 1 : 0;
+
+        var powerSpec = new float[nBins, nFrames];
+        var frame = new float[_nFft];
 
         for (int frameIdx = 0; frameIdx < nFrames; frameIdx++)
         {
             int start = frameIdx * _hopLength;
-            var frame = new float[_nFft];
 
             // Extract and window frame
-            for (int i = 0; i < _nFft && start + i < audio.Length; i++)
+            for (int i = 0; i < _nFft; i++)
             {
-                frame[i] = audio[start + i] * _window[i];
+                frame[i] = (start + i < padded.Length) ? padded[start + i] * _window[i] : 0f;
             }
 
-            // Compute FFT
-            var fft = Fft(frame);
-
-            // Store magnitude (only first half + DC/Nyquist)
-            for (int i = 0; i < _nFft / 2 + 1; i++)
+            // Compute exact nFft-point DFT for this frame and store power directly
+            for (int k = 0; k < nBins; k++)
             {
-                stft[i, frameIdx] = fft[i];
+                double re = 0, im = 0;
+                for (int n = 0; n < _nFft; n++)
+                {
+                    re += frame[n] * _dftCosTable[k, n];
+                    im += frame[n] * _dftSinTable[k, n];
+                }
+                powerSpec[k, frameIdx] = (float)(re * re + im * im);
             }
         }
 
-        return stft;
+        return powerSpec;
     }
 
-    private float[,] ComputeMagnitude(Complex[,] stft)
+    private float[,] ComputePowerSpectrum(float[,] stftPower)
     {
-        int nBins = stft.GetLength(0);
-        int nFrames = stft.GetLength(1);
-        var mag = new float[nBins, nFrames];
-
-        for (int i = 0; i < nBins; i++)
-        {
-            for (int j = 0; j < nFrames; j++)
-            {
-                var m = stft[i, j].Magnitude;
-                mag[i, j] = m * m;
-            }
-        }
-
-        return mag;
+        // Already computed as power spectrum in ComputeCenteredStft
+        return stftPower;
     }
 
     private float[,] ApplyMelFilterbank(float[,] magSpec)
@@ -137,111 +157,92 @@ internal sealed class MelSpectrogramProcessor
         return melSpec;
     }
 
-    private static float[] CreateHannWindow(int size)
+    /// <summary>
+    /// Periodic Hann window matching torch.hann_window(N_FFT).
+    /// Divides by size (not size-1) to produce the periodic variant.
+    /// </summary>
+    private static float[] CreatePeriodicHannWindow(int size)
     {
         var window = new float[size];
         for (int i = 0; i < size; i++)
         {
-            window[i] = 0.5f * (1 - MathF.Cos(2 * MathF.PI * i / (size - 1)));
+            window[i] = 0.5f * (1 - MathF.Cos(2 * MathF.PI * i / size));
         }
         return window;
     }
 
+    /// <summary>
+    /// Creates a mel filterbank with slaney normalization matching librosa.filters.mel exactly.
+    /// Uses the Slaney mel scale (linear below 1000 Hz, logarithmic above) and Hz-space interpolation.
+    /// </summary>
     private static float[,] CreateMelFilterbank(int sampleRate, int nFft, int nMels)
     {
         int nFreqs = nFft / 2 + 1;
         var filterbank = new float[nMels, nFreqs];
 
-        // Mel scale conversion
-        float HzToMel(float hz) => 2595.0f * MathF.Log10(1 + hz / 700.0f);
-        float MelToHz(float mel) => 700.0f * (MathF.Pow(10, mel / 2595.0f) - 1);
+        // Slaney mel scale (matches librosa default htk=False)
+        const float fMin = 0.0f;
+        const float fSp = 200.0f / 3.0f; // ~66.667 Hz per mel in linear region
+        const float minLogHz = 1000.0f;
+        float minLogMel = (minLogHz - fMin) / fSp; // = 15.0
+        float logStep = MathF.Log(6.4f) / 27.0f;
 
+        float HzToMel(float hz)
+        {
+            if (hz < minLogHz)
+                return (hz - fMin) / fSp;
+            return minLogMel + MathF.Log(hz / minLogHz) / logStep;
+        }
+
+        float MelToHz(float mel)
+        {
+            if (mel < minLogMel)
+                return fMin + fSp * mel;
+            return minLogHz * MathF.Exp(logStep * (mel - minLogMel));
+        }
+
+        // Create mel-spaced center frequencies (nMels + 2 for left/right edges)
         float minMel = HzToMel(0);
         float maxMel = HzToMel(sampleRate / 2.0f);
-
-        // Create mel points
-        var melPoints = new float[nMels + 2];
+        var melFreqs = new float[nMels + 2];
         for (int i = 0; i < nMels + 2; i++)
         {
-            melPoints[i] = minMel + (maxMel - minMel) * i / (nMels + 1);
+            melFreqs[i] = MelToHz(minMel + (maxMel - minMel) * i / (nMels + 1));
         }
 
-        // Convert mel points to Hz and then to FFT bin indices
-        var binPoints = new float[nMels + 2];
-        for (int i = 0; i < nMels + 2; i++)
+        // FFT bin center frequencies
+        var fftFreqs = new float[nFreqs];
+        for (int i = 0; i < nFreqs; i++)
         {
-            float hz = MelToHz(melPoints[i]);
-            binPoints[i] = (nFft + 1) * hz / sampleRate;
+            fftFreqs[i] = (float)sampleRate / 2.0f * i / (nFreqs - 1);
         }
 
-        // Create triangular filters
+        // Frequency differences between adjacent mel points
+        var fdiff = new float[nMels + 1];
+        for (int i = 0; i < nMels + 1; i++)
+        {
+            fdiff[i] = melFreqs[i + 1] - melFreqs[i];
+        }
+
+        // Build triangular filters in Hz space (matches librosa exactly)
         for (int mel = 0; mel < nMels; mel++)
         {
-            float left = binPoints[mel];
-            float center = binPoints[mel + 1];
-            float right = binPoints[mel + 2];
-
             for (int bin = 0; bin < nFreqs; bin++)
             {
-                if (bin >= left && bin <= center)
-                {
-                    filterbank[mel, bin] = (bin - left) / (center - left);
-                }
-                else if (bin > center && bin <= right)
-                {
-                    filterbank[mel, bin] = (right - bin) / (right - center);
-                }
+                float lower = (fftFreqs[bin] - melFreqs[mel]) / fdiff[mel];
+                float upper = (melFreqs[mel + 2] - fftFreqs[bin]) / fdiff[mel + 1];
+                filterbank[mel, bin] = MathF.Max(0, MathF.Min(lower, upper));
+            }
+
+            // Slaney normalization: normalize by the width of the mel band
+            float enorm = 2.0f / (melFreqs[mel + 2] - melFreqs[mel]);
+            for (int bin = 0; bin < nFreqs; bin++)
+            {
+                filterbank[mel, bin] *= enorm;
             }
         }
 
         return filterbank;
-    }
-
-    // Simple Cooley-Tukey radix-2 FFT
-    private static Complex[] Fft(float[] input)
-    {
-        int n = input.Length;
-        
-        // Pad to next power of 2
-        int powerOf2 = 1;
-        while (powerOf2 < n) powerOf2 *= 2;
-        
-        var x = new Complex[powerOf2];
-        for (int i = 0; i < n; i++)
-        {
-            x[i] = new Complex(input[i], 0);
-        }
-
-        FftRecursive(x);
-        return x;
-    }
-
-    private static void FftRecursive(Span<Complex> x)
-    {
-        int n = x.Length;
-        if (n <= 1) return;
-
-        // Divide
-        var even = new Complex[n / 2];
-        var odd = new Complex[n / 2];
-        for (int i = 0; i < n / 2; i++)
-        {
-            even[i] = x[i * 2];
-            odd[i] = x[i * 2 + 1];
-        }
-
-        // Conquer
-        FftRecursive(even);
-        FftRecursive(odd);
-
-        // Combine
-        for (int k = 0; k < n / 2; k++)
-        {
-            double angle = -2.0 * Math.PI * k / n;
-            var t = new Complex(Math.Cos(angle), Math.Sin(angle)) * odd[k];
-            x[k] = even[k] + t;
-            x[k + n / 2] = even[k] - t;
-        }
     }
 
     private readonly struct Complex
