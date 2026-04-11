@@ -94,12 +94,12 @@ public class WhisperTranscriptionTests
     }
 
     /// <summary>
-    /// Regression test for GitHub issue #10: Inference returns empty text for trump.wav.
+    /// Regression test for GitHub issue #10: Inference returns empty text.
     /// Audio sample rate is 48kHz stereo, requires resampling to 16kHz mono.
     /// Expected text: "We know technology is advancing quickly, but AI is moving even faster."
     /// </summary>
     [Fact(Timeout = TimeoutMs)]
-    public async Task TranscribeTrumpAudio_ReturnsExpectedText_Issue10()
+    public async Task Transcribe48kHzStereoAudio_ReturnsExpectedText_Issue10()
     {
         var options = new WhisperOptions
         {
@@ -110,7 +110,7 @@ public class WhisperTranscriptionTests
 
         using var client = await WhisperClient.CreateAsync(options);
 
-        var audioPath = GetTestDataPath("trump.wav");
+        var audioPath = GetTestDataPath("test-audio-48khz-stereo.wav");
         var result = await client.TranscribeAsync(audioPath);
 
         Assert.NotNull(result);
@@ -124,12 +124,12 @@ public class WhisperTranscriptionTests
     }
 
     /// <summary>
-    /// Regression test for GitHub issue #10: Inference returns empty text for trump16.wav.
-    /// Audio is already 16kHz mono.
+    /// Regression test for GitHub issue #10: Inference returns empty text.
+    /// Audio is already 16kHz mono (native Whisper format).
     /// Expected text: "We know technology is advancing quickly, but AI is moving even faster."
     /// </summary>
     [Fact(Timeout = TimeoutMs)]
-    public async Task TranscribeTrump16Audio_ReturnsExpectedText_Issue10()
+    public async Task Transcribe16kHzMonoAudio_ReturnsExpectedText_Issue10()
     {
         var options = new WhisperOptions
         {
@@ -140,7 +140,7 @@ public class WhisperTranscriptionTests
 
         using var client = await WhisperClient.CreateAsync(options);
 
-        var audioPath = GetTestDataPath("trump16.wav");
+        var audioPath = GetTestDataPath("test-audio-16khz-mono.wav");
         var result = await client.TranscribeAsync(audioPath);
 
         Assert.NotNull(result);

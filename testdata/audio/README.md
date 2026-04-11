@@ -13,6 +13,8 @@ The test audio files cover different scenarios and audio characteristics to ensu
 | **test-audio-small.wav** | 201 KB | ~2-3 sec | Short audio clip for basic transcription smoke tests. Contains recognizable English speech. | ✅ Works with tiny, base, small, medium, large models |
 | **test-audio-medium.wav** | 347 KB | ~4-5 sec | Medium-length audio clip for fuller transcription tests. Contains longer English speech passage. | ⚠️ Tiny model may return empty text; base, small, medium, large models produce better results |
 | **test-audio-failing.wav** | 345 KB | ~4-5 sec | Audio that previously exposed an ONNX reshape bug (Issue #7). Models with zero-dimension cache tensors would crash during decoder initialization. Now transcribes successfully after fix. | ✅ Works with all models (post Issue #7 fix) |
+| **test-audio-48khz-stereo.wav** | 582 KB | ~3-4 sec | 48kHz stereo audio requiring resampling to 16kHz mono. Regression test for Issue #10 (empty inference output). Expected: contains "technology" and "AI". | ✅ Works with all models (post Issue #10 fix) |
+| **test-audio-16khz-mono.wav** | 194 KB | ~3-4 sec | 16kHz mono audio in native Whisper format. Regression test for Issue #10 (empty inference output). Expected: contains "technology" and "AI". | ✅ Works with all models (post Issue #10 fix) |
 
 ## Model Notes
 
@@ -42,6 +44,8 @@ private static string GetTestDataPath(string fileName)
 [InlineData("test-audio-small.wav")]
 [InlineData("test-audio-medium.wav")]
 [InlineData("test-audio-failing.wav")]
+[InlineData("test-audio-48khz-stereo.wav")]
+[InlineData("test-audio-16khz-mono.wav")]
 public void AudioProcessor_HandlesTestFiles(string fileName)
 {
     var processor = new AudioProcessor();
@@ -112,6 +116,16 @@ The test audio files are used by:
 
 ## Known Issues and Fixes
 
+### Issue #10: Inference Returns Empty Text (Fixed)
+
+**Problem:** Whisper ONNX inference with `whisper-tiny.en` produced empty transcription output for all audio files.
+
+**Root causes:** (1) Mel spectrogram used wrong Hann window, HTK mel scale instead of Slaney, and no STFT centering. (2) Merged ONNX decoder has an internal Reshape bug with empty cache tensors. (3) Tokenizer failed to load special tokens from `added_tokens` in `tokenizer.json`. (4) Missing `begin_suppress_tokens` logic allowed model to immediately output EOT.
+
+**Fix:** Rewrote mel spectrogram computation, implemented dual-decoder architecture, fixed tokenizer loading, and added config-driven token suppression.
+
+**Result:** All test audio files (including 48kHz stereo and 16kHz mono samples) transcribe correctly.
+
 ### Issue #7: ONNX Reshape Error (Fixed)
 
 **Problem:** The `test-audio-failing.wav` file previously caused an ONNX Runtime reshape error when using onnx-community Whisper models. The models exported encoder cross-attention cache tensors with a 0-length dimension, which crashed the decoder initialization.
@@ -137,3 +151,4 @@ If you need to reuse these files in other projects:
 - **Related Issues:**
   - [#7 — ONNX reshape error with zero-dimension cache](https://github.com/elbruno/ElBruno.Whisper/issues/7)
   - [#9 — Fix for zero-dimension tensor handling](https://github.com/elbruno/ElBruno.Whisper/pull/9)
+  - [#10 — Inference returns empty text](https://github.com/elbruno/ElBruno.Whisper/issues/10)
