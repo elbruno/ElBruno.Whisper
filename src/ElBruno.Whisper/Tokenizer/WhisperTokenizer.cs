@@ -39,8 +39,8 @@ internal sealed class WhisperTokenizer
             }
         }
         
-        // If vocab not found in model, try added_tokens
-        if (_idToToken.Count == 0 && root.TryGetProperty("added_tokens", out var addedTokens))
+        // Always load added_tokens (special tokens like SOT, EOT, language, etc.)
+        if (root.TryGetProperty("added_tokens", out var addedTokens))
         {
             foreach (var token in addedTokens.EnumerateArray())
             {

@@ -8,6 +8,7 @@ public static class KnownWhisperModels
     private static readonly string[] StandardRequiredFiles =
     [
         "onnx/encoder_model.onnx",
+        "onnx/decoder_model.onnx",
         "onnx/decoder_model_merged.onnx",
         "config.json",
         "tokenizer.json",

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ElBruno.HuggingFace;
 using ElBruno.Whisper.Audio;
 using ElBruno.Whisper.Inference;
@@ -14,18 +15,24 @@ public sealed class WhisperClient : IDisposable
     private readonly AudioProcessor _audioProcessor;
     private readonly WhisperTokenizer _tokenizer;
     private readonly WhisperInferenceSession _inference;
+    private readonly int[] _configSuppressTokens;
+    private readonly int[] _beginSuppressTokens;
     private bool _disposed;
 
     private WhisperClient(
         WhisperOptions options,
         AudioProcessor audioProcessor,
         WhisperTokenizer tokenizer,
-        WhisperInferenceSession inference)
+        WhisperInferenceSession inference,
+        int[] configSuppressTokens,
+        int[] beginSuppressTokens)
     {
         _options = options;
         _audioProcessor = audioProcessor;
         _tokenizer = tokenizer;
         _inference = inference;
+        _configSuppressTokens = configSuppressTokens;
+        _beginSuppressTokens = beginSuppressTokens;
     }
 
     /// <summary>
@@ -70,7 +77,11 @@ public sealed class WhisperClient : IDisposable
             options.Model.NumDecoderLayers,
             options.Model.EncoderDimension);
 
-        return new WhisperClient(options, audioProcessor, tokenizer, inference);
+        // Load suppress_tokens and begin_suppress_tokens from config.json
+        var (configSuppressTokens, beginSuppressTokens) = LoadSuppressConfig(modelPath);
+
+        return new WhisperClient(options, audioProcessor, tokenizer, inference,
+            configSuppressTokens, beginSuppressTokens);
     }
 
     /// <summary>
@@ -96,7 +107,9 @@ public sealed class WhisperClient : IDisposable
                 melSpec,
                 initialTokens,
                 _options.MaxTokens,
-                _tokenizer.EotToken
+                _tokenizer.EotToken,
+                GetSuppressTokens(),
+                _beginSuppressTokens
             );
 
             // Decode tokens
@@ -131,7 +144,9 @@ public sealed class WhisperClient : IDisposable
                 melSpec,
                 initialTokens,
                 _options.MaxTokens,
-                _tokenizer.EotToken
+                _tokenizer.EotToken,
+                GetSuppressTokens(),
+                _beginSuppressTokens
             );
 
             // Decode tokens
@@ -153,19 +168,81 @@ public sealed class WhisperClient : IDisposable
 
         var tokens = new List<int> { sot };
 
-        // Add language token if specified
+        // Add language and task tokens only when language is specified.
+        // For English-only (.en) models without explicit language, the Whisper
+        // reference uses just [SOT, noTimestamps] — no language or task tokens.
         if (language.HasValue)
         {
             tokens.Add(language.Value);
+            tokens.Add(_options.Translate ? translate : transcribe);
         }
-
-        // Add task token (transcribe or translate)
-        tokens.Add(_options.Translate ? translate : transcribe);
 
         // Add no-timestamps token
         tokens.Add(noTimestamps);
 
         return tokens.ToArray();
+    }
+
+    /// <summary>
+    /// Builds the list of token IDs to suppress during decoding.
+    /// Combines the model's config suppress_tokens with timestamp suppression.
+    /// EOT is NOT suppressed here (it's the stop condition).
+    /// </summary>
+    private int[] GetSuppressTokens()
+    {
+        var suppress = new HashSet<int>(_configSuppressTokens);
+
+        // Suppress timestamp tokens (all tokens from noTimestamps+1 onward)
+        var (_, _, _, noTimestamps, _) = _tokenizer.GetSpecialTokenIds();
+        const int vocabSize = 51865;
+        for (int t = noTimestamps + 1; t < vocabSize; t++)
+        {
+            suppress.Add(t);
+        }
+
+        return suppress.ToArray();
+    }
+
+    /// <summary>
+    /// Reads suppress_tokens and begin_suppress_tokens from the model's config.json.
+    /// Falls back to reasonable defaults if config.json is not available.
+    /// </summary>
+    private static (int[] SuppressTokens, int[] BeginSuppressTokens) LoadSuppressConfig(string modelPath)
+    {
+        var configPath = Path.Combine(modelPath, "config.json");
+        if (!File.Exists(configPath))
+        {
+            return (Array.Empty<int>(), new[] { 220, 50256 });
+        }
+
+        try
+        {
+            var json = File.ReadAllText(configPath);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var suppressTokens = Array.Empty<int>();
+            if (root.TryGetProperty("suppress_tokens", out var suppressProp))
+            {
+                suppressTokens = suppressProp.EnumerateArray()
+                    .Select(e => e.GetInt32())
+                    .ToArray();
+            }
+
+            var beginSuppressTokens = new[] { 220, 50256 };
+            if (root.TryGetProperty("begin_suppress_tokens", out var beginProp))
+            {
+                beginSuppressTokens = beginProp.EnumerateArray()
+                    .Select(e => e.GetInt32())
+                    .ToArray();
+            }
+
+            return (suppressTokens, beginSuppressTokens);
+        }
+        catch
+        {
+            return (Array.Empty<int>(), new[] { 220, 50256 });
+        }
     }
 
     private static async Task DownloadModelAsync(

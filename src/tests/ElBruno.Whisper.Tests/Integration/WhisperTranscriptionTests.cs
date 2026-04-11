@@ -93,6 +93,66 @@ public class WhisperTranscriptionTests
             () => client.TranscribeAsync(nonExistentPath));
     }
 
+    /// <summary>
+    /// Regression test for GitHub issue #10: Inference returns empty text.
+    /// Audio sample rate is 48kHz stereo, requires resampling to 16kHz mono.
+    /// Expected text: "We know technology is advancing quickly, but AI is moving even faster."
+    /// </summary>
+    [Fact(Timeout = TimeoutMs)]
+    public async Task Transcribe48kHzStereoAudio_ReturnsExpectedText_Issue10()
+    {
+        var options = new WhisperOptions
+        {
+            Model = KnownWhisperModels.WhisperTinyEn,
+            EnsureModelDownloaded = true,
+            Language = "en"
+        };
+
+        using var client = await WhisperClient.CreateAsync(options);
+
+        var audioPath = GetTestDataPath("test-audio-48khz-stereo.wav");
+        var result = await client.TranscribeAsync(audioPath);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result.Text);
+        Assert.NotEmpty(result.Text);
+
+        // Verify the transcription contains key phrases from the expected text
+        var text = result.Text.ToLowerInvariant();
+        Assert.Contains("technology", text);
+        Assert.Contains("ai", text);
+    }
+
+    /// <summary>
+    /// Regression test for GitHub issue #10: Inference returns empty text.
+    /// Audio is already 16kHz mono (native Whisper format).
+    /// Expected text: "We know technology is advancing quickly, but AI is moving even faster."
+    /// </summary>
+    [Fact(Timeout = TimeoutMs)]
+    public async Task Transcribe16kHzMonoAudio_ReturnsExpectedText_Issue10()
+    {
+        var options = new WhisperOptions
+        {
+            Model = KnownWhisperModels.WhisperTinyEn,
+            EnsureModelDownloaded = true,
+            Language = "en"
+        };
+
+        using var client = await WhisperClient.CreateAsync(options);
+
+        var audioPath = GetTestDataPath("test-audio-16khz-mono.wav");
+        var result = await client.TranscribeAsync(audioPath);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result.Text);
+        Assert.NotEmpty(result.Text);
+
+        // Verify the transcription contains key phrases from the expected text
+        var text = result.Text.ToLowerInvariant();
+        Assert.Contains("technology", text);
+        Assert.Contains("ai", text);
+    }
+
     [Fact(Timeout = TimeoutMs)]
     public async Task TranscribeStream_MediumAudio_ReturnsNonEmptyText()
     {
