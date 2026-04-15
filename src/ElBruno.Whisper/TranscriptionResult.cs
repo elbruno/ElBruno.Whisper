@@ -19,4 +19,9 @@ public sealed record TranscriptionResult
     /// Duration of the audio processed.
     /// </summary>
     public TimeSpan Duration { get; init; }
+
+    /// <summary>
+    /// Timestamped segments, if timestamp extraction was enabled.
+    /// </summary>
+    public IReadOnlyList<TranscriptionSegment>? Segments { get; init; }
 }

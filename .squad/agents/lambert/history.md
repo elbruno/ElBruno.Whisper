@@ -46,3 +46,20 @@
 - All 109 tests passing with fix applied
 - Test infrastructure ready for CI/CD pipeline
 - Key decision documented: ONNX input tensor rank must match model declaration exactly
+
+### 2026-04-15 - Timestamp support tests (Issue #12)
+- **Action:** Wrote comprehensive tests for Ripley's timestamp implementation
+- **New files created:**
+  - `TranscriptionSegmentTests.cs`: 14 tests — properties, record equality, hash code, ToString, `with` expression, sealed check
+  - `Tokenizer/WhisperTokenizerTimestampTests.cs`: 22 tests — IsTimestampToken boundary (50363=false, 50364=true), GetTimestamp known values (0.00s, 0.02s, 1.00s), DecodeWithTimestamps segment extraction, special token skipping, trailing text handling, empty segment skipping
+  - `testdata/tokenizer/test-tokenizer.json`: Minimal tokenizer vocab for unit testing without real model
+- **Existing files updated:**
+  - `WhisperOptionsTests.cs`: +3 tests for EnableTimestamps (default false, set true, toggle back)
+  - `TranscriptionResultTests.cs`: +6 tests for Segments property (default null, set list, empty list, IReadOnlyList type, timestamp data)
+  - `ElBruno.Whisper.Tests.csproj`: Added tokenizer testdata content link
+- **Total:** 171 tests passing (was 126), 45 new tests added
+- **Edge cases discovered:**
+  - DecodeWithTimestamps handles trailing text (start timestamp but no end) by emitting segment with start=end
+  - Empty segments (two timestamps with no text between) are silently skipped (not emitted)
+  - The WhisperTokenizer requires file-based construction — created a synthetic test-tokenizer.json with 8 vocab tokens + 6 special tokens for fast, isolated testing
+  - Timestamp math: token 50364 + N → N * 0.02 seconds; token 50414 = exactly 1.00s (index 50)

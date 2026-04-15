@@ -138,4 +138,35 @@ public class WhisperOptionsTests
         
         Assert.True(options.Translate);
     }
+
+    [Fact]
+    public void DefaultEnableTimestamps_ShouldBeFalse()
+    {
+        var options = new WhisperOptions();
+
+        Assert.False(options.EnableTimestamps);
+    }
+
+    [Fact]
+    public void CanSetEnableTimestamps()
+    {
+        var options = new WhisperOptions
+        {
+            EnableTimestamps = true
+        };
+
+        Assert.True(options.EnableTimestamps);
+    }
+
+    [Fact]
+    public void EnableTimestamps_CanBeToggledBackToFalse()
+    {
+        var options = new WhisperOptions
+        {
+            EnableTimestamps = true
+        };
+        options.EnableTimestamps = false;
+
+        Assert.False(options.EnableTimestamps);
+    }
 }

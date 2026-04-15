@@ -112,15 +112,7 @@ public sealed class WhisperClient : IDisposable
                 _beginSuppressTokens
             );
 
-            // Decode tokens
-            var text = _tokenizer.Decode(tokens);
-
-            return new TranscriptionResult
-            {
-                Text = text,
-                DetectedLanguage = _options.Language,
-                Duration = audioDuration
-            };
+            return BuildResult(tokens, audioDuration);
         }, cancellationToken);
     }
 
@@ -149,16 +141,30 @@ public sealed class WhisperClient : IDisposable
                 _beginSuppressTokens
             );
 
-            // Decode tokens
-            var text = _tokenizer.Decode(tokens);
+            return BuildResult(tokens, audioDuration);
+        }, cancellationToken);
+    }
 
+    private TranscriptionResult BuildResult(int[] tokens, TimeSpan audioDuration)
+    {
+        if (_options.EnableTimestamps)
+        {
+            var (text, segments) = _tokenizer.DecodeWithTimestamps(tokens);
             return new TranscriptionResult
             {
                 Text = text,
                 DetectedLanguage = _options.Language,
-                Duration = audioDuration
+                Duration = audioDuration,
+                Segments = segments
             };
-        }, cancellationToken);
+        }
+
+        return new TranscriptionResult
+        {
+            Text = _tokenizer.Decode(tokens),
+            DetectedLanguage = _options.Language,
+            Duration = audioDuration
+        };
     }
 
     private int[] GetInitialTokens()
@@ -177,8 +183,12 @@ public sealed class WhisperClient : IDisposable
             tokens.Add(_options.Translate ? translate : transcribe);
         }
 
-        // Add no-timestamps token
-        tokens.Add(noTimestamps);
+        // Skip no-timestamps token when timestamps are enabled so the model
+        // generates timestamp tokens in its output sequence.
+        if (!_options.EnableTimestamps)
+        {
+            tokens.Add(noTimestamps);
+        }
 
         return tokens.ToArray();
     }
@@ -192,12 +202,15 @@ public sealed class WhisperClient : IDisposable
     {
         var suppress = new HashSet<int>(_configSuppressTokens);
 
-        // Suppress timestamp tokens (all tokens from noTimestamps+1 onward)
-        var (_, _, _, noTimestamps, _) = _tokenizer.GetSpecialTokenIds();
-        const int vocabSize = 51865;
-        for (int t = noTimestamps + 1; t < vocabSize; t++)
+        // Only suppress timestamp tokens when timestamps are disabled
+        if (!_options.EnableTimestamps)
         {
-            suppress.Add(t);
+            var (_, _, _, noTimestamps, _) = _tokenizer.GetSpecialTokenIds();
+            const int vocabSize = 51865;
+            for (int t = noTimestamps + 1; t < vocabSize; t++)
+            {
+                suppress.Add(t);
+            }
         }
 
         return suppress.ToArray();
