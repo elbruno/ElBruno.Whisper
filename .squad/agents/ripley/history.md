@@ -27,6 +27,18 @@
 
 ## Learnings
 
+### 2025-07-15 - Timestamp Support (Issue #12)
+- Added `EnableTimestamps` option to `WhisperOptions` (default: false for backward compatibility)
+- Created `TranscriptionSegment` record type with `Start`, `End`, `Text` properties
+- Added `Segments` property (nullable `IReadOnlyList<TranscriptionSegment>`) to `TranscriptionResult`
+- Tokenizer changes: `IsTimestampToken()`, `GetTimestamp()`, `DecodeWithTimestamps()` methods; `NoTimestampsToken` property
+- Timestamp math: token 50364 = 0.00s, each subsequent ID adds 0.02s (`(tokenId - 50364) * 0.02`)
+- When timestamps enabled: omit `<|notimestamps|>` from initial sequence AND don't suppress timestamp tokens (IDs 50364+)
+- Extracted `BuildResult()` helper in `WhisperClient` to eliminate duplicated decode logic between file/stream overloads
+- `DecodeWithTimestamps` handles edge cases: trailing text with no end timestamp, empty segments, no timestamp tokens at all
+- All 112 existing unit tests continue to pass — zero behavioral change when `EnableTimestamps=false`
+- Key files: `WhisperOptions.cs`, `TranscriptionSegment.cs`, `TranscriptionResult.cs`, `WhisperTokenizer.cs`, `WhisperClient.cs`
+
 
 ### 2025-07-14 - Fix: use_cache_branch + KV Cache for Merged Decoder (Issue #1, summarized in Core Context)
 

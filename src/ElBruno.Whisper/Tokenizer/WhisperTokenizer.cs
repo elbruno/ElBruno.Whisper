@@ -9,8 +9,20 @@ internal sealed class WhisperTokenizer
 {
     private readonly Dictionary<int, string> _idToToken = new();
     private readonly int _eotToken;
+    private readonly int _noTimestampsToken;
+
+    /// <summary>
+    /// The first timestamp token ID (noTimestamps + 1 = 50364).
+    /// Each subsequent ID represents an additional 0.02 seconds.
+    /// </summary>
+    private const double SecondsPerTimestampToken = 0.02;
 
     public int EotToken => _eotToken;
+
+    /// <summary>
+    /// Token ID for the &lt;|notimestamps|&gt; special token.
+    /// </summary>
+    public int NoTimestampsToken => _noTimestampsToken;
 
     public WhisperTokenizer(string tokenizerJsonPath)
     {
@@ -18,6 +30,7 @@ internal sealed class WhisperTokenizer
         
         // Common Whisper special tokens
         _eotToken = FindTokenId("<|endoftext|>") ?? 50257;
+        _noTimestampsToken = FindTokenId("<|notimestamps|>") ?? 50363;
     }
 
     private void LoadTokenizer(string path)
@@ -77,6 +90,104 @@ internal sealed class WhisperTokenizer
         text = text.Replace("Ġ", " "); // GPT-2 style space encoding
         text = text.Replace("Ċ", "\n"); // Newline encoding
         
+        return text.Trim();
+    }
+
+    /// <summary>
+    /// Returns true if the token ID is a timestamp token (>= noTimestamps + 1).
+    /// </summary>
+    public bool IsTimestampToken(int tokenId) => tokenId >= _noTimestampsToken + 1;
+
+    /// <summary>
+    /// Converts a timestamp token ID to its corresponding time offset.
+    /// Token 50364 = 0.00s, 50365 = 0.02s, etc.
+    /// </summary>
+    public TimeSpan GetTimestamp(int tokenId)
+    {
+        var index = tokenId - (_noTimestampsToken + 1);
+        return TimeSpan.FromSeconds(index * SecondsPerTimestampToken);
+    }
+
+    /// <summary>
+    /// Decodes token IDs into text and timestamped segments.
+    /// Timestamp tokens appear in pairs: start timestamp, text tokens, end timestamp.
+    /// </summary>
+    public (string Text, List<TranscriptionSegment> Segments) DecodeWithTimestamps(int[] tokenIds)
+    {
+        var segments = new List<TranscriptionSegment>();
+        var allTextTokens = new List<string>();
+
+        TimeSpan? pendingStart = null;
+        var currentSegmentTokens = new List<string>();
+
+        foreach (var id in tokenIds)
+        {
+            if (IsTimestampToken(id))
+            {
+                var ts = GetTimestamp(id);
+
+                if (pendingStart is null)
+                {
+                    // This is a start timestamp
+                    pendingStart = ts;
+                    currentSegmentTokens.Clear();
+                }
+                else
+                {
+                    // This is an end timestamp — emit segment
+                    var segmentText = DecodeTextTokens(currentSegmentTokens);
+                    if (!string.IsNullOrWhiteSpace(segmentText))
+                    {
+                        segments.Add(new TranscriptionSegment
+                        {
+                            Start = pendingStart.Value,
+                            End = ts,
+                            Text = segmentText
+                        });
+                    }
+
+                    pendingStart = null;
+                    currentSegmentTokens.Clear();
+                }
+            }
+            else if (_idToToken.TryGetValue(id, out var token))
+            {
+                // Skip non-timestamp special tokens
+                if (token.StartsWith("<|") && token.EndsWith("|>"))
+                    continue;
+
+                currentSegmentTokens.Add(token);
+                allTextTokens.Add(token);
+            }
+        }
+
+        // Handle trailing text tokens with a pending start but no end timestamp
+        if (pendingStart is not null && currentSegmentTokens.Count > 0)
+        {
+            var segmentText = DecodeTextTokens(currentSegmentTokens);
+            if (!string.IsNullOrWhiteSpace(segmentText))
+            {
+                segments.Add(new TranscriptionSegment
+                {
+                    Start = pendingStart.Value,
+                    End = pendingStart.Value,
+                    Text = segmentText
+                });
+            }
+        }
+
+        var fullText = DecodeTextTokens(allTextTokens);
+        return (fullText, segments);
+    }
+
+    /// <summary>
+    /// Joins raw BPE tokens and cleans up encoding artifacts.
+    /// </summary>
+    private static string DecodeTextTokens(List<string> tokens)
+    {
+        var text = string.Join("", tokens);
+        text = text.Replace("Ġ", " ");
+        text = text.Replace("Ċ", "\n");
         return text.Trim();
     }
 

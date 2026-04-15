@@ -44,4 +44,11 @@ public sealed class WhisperOptions
     /// Sampling temperature. 0.0 = greedy (deterministic), higher = more random.
     /// </summary>
     public float Temperature { get; set; } = 0.0f;
+
+    /// <summary>
+    /// If true, extract timestamp information from the model output.
+    /// Results will include <see cref="TranscriptionResult.Segments"/> with start/end times.
+    /// Defaults to false for backward compatibility.
+    /// </summary>
+    public bool EnableTimestamps { get; set; }
 }
