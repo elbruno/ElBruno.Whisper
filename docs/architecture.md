@@ -194,31 +194,64 @@ Error scenarios and recovery:
 
 ## Threading & Concurrency
 
-WhisperClient is **not thread-safe**. Use one client per thread or use locks:
+`WhisperClient` is thread-safe for concurrent transcription calls. The concurrency contract is defined by `WhisperOptions.Concurrency`:
+
+- `MaximumConcurrentRequests` limits how many requests can run inference at once.
+- `QueueTimeout` bounds how long callers wait for a free slot before `TimeoutException` is thrown.
+- `EnableSessionPooling` decides whether finished requests return their ONNX session to a pool or dispose it immediately.
+
+### Runtime Layout
+
+The client now separates immutable shared model resources from per-request state:
+
+```text
+WhisperClient
+  ├─ AudioProcessor (shared)
+  ├─ WhisperModelRuntime (shared)
+  │   ├─ WhisperTokenizer (shared)
+  │   ├─ Suppress-token config (shared)
+  │   └─ WhisperSessionPool (shared)
+  │       └─ WhisperInferenceSession (leased per request)
+  └─ Request state
+      ├─ mel spectrogram
+      ├─ token list
+      ├─ KV cache
+      └─ transcription result
+```
+
+### Concurrency Behavior
+
+With the default settings, requests are serialized through a single inference slot. Raising the limit allows one shared client to process multiple files at the same time:
 
 ```csharp
-// Safe: one client per async task
-var result = await whisperClient.TranscribeAsync("audio1.wav");
-
-// NOT safe: concurrent access to same client
-Task.Run(() => client.TranscribeAsync("audio1.wav"));
-Task.Run(() => client.TranscribeAsync("audio2.wav"));  // Race condition!
-
-// Safe with lock
-private static readonly SemaphoreSlim s_semaphore = new(1);
-public async Task<string> SafeTranscribe(string file)
+using var client = await WhisperClient.CreateAsync(new WhisperOptions
 {
-    await s_semaphore.WaitAsync();
-    try
+    Concurrency = new WhisperConcurrencyOptions
     {
-        return (await client.TranscribeAsync(file)).Text;
+        MaximumConcurrentRequests = 2,
+        QueueTimeout = TimeSpan.FromSeconds(15),
+        EnableSessionPooling = true
     }
-    finally
-    {
-        s_semaphore.Release();
-    }
-}
+});
+
+var results = await Task.WhenAll(
+    client.TranscribeAsync("audio1.wav"),
+    client.TranscribeAsync("audio2.wav"));
 ```
+
+### Cancellation and Metrics
+
+Requests observe cancellation at these safe points:
+
+1. Before audio processing starts
+2. After audio processing completes
+3. While waiting for an inference slot
+4. At each decoder step during token generation
+
+The library also publishes `System.Diagnostics.Metrics` histograms through the `ElBruno.Whisper` meter:
+
+- `elbruno.whisper.queue.wait.duration`
+- `elbruno.whisper.inference.duration`
 
 ## Memory Usage
 

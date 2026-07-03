@@ -118,5 +118,28 @@ public class WhisperServiceExtensionsTests
         Assert.Equal(0.0f, options.Temperature);
         Assert.Equal(448, options.MaxTokens);
         Assert.False(options.Translate);
+        Assert.Equal(1, options.Concurrency.MaximumConcurrentRequests);
+        Assert.Equal(TimeSpan.FromSeconds(30), options.Concurrency.QueueTimeout);
+        Assert.True(options.Concurrency.EnableSessionPooling);
+    }
+
+    [Fact]
+    public void AddWhisper_WithConfigureAction_CanSetConcurrencyOptions()
+    {
+        var services = new ServiceCollection();
+
+        services.AddWhisper(options =>
+        {
+            options.Concurrency.MaximumConcurrentRequests = 2;
+            options.Concurrency.QueueTimeout = TimeSpan.FromSeconds(10);
+            options.Concurrency.EnableSessionPooling = false;
+        });
+
+        var serviceProvider = services.BuildServiceProvider();
+        var options = serviceProvider.GetRequiredService<WhisperOptions>();
+
+        Assert.Equal(2, options.Concurrency.MaximumConcurrentRequests);
+        Assert.Equal(TimeSpan.FromSeconds(10), options.Concurrency.QueueTimeout);
+        Assert.False(options.Concurrency.EnableSessionPooling);
     }
 }

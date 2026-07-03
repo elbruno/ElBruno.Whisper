@@ -233,4 +233,59 @@ public class WhisperTranscriptionTests
             }
         }
     }
+
+    [Fact(Timeout = TimeoutMs)]
+    public async Task ConcurrentTranscribe_WithConcurrencyLimitOne_QueuesRequestsSafely()
+    {
+        var options = new WhisperOptions
+        {
+            Model = KnownWhisperModels.WhisperTinyEn,
+            EnsureModelDownloaded = true,
+            Language = "en",
+            Concurrency = new WhisperConcurrencyOptions
+            {
+                MaximumConcurrentRequests = 1,
+                QueueTimeout = TimeSpan.FromMinutes(2)
+            }
+        };
+
+        using var client = await WhisperClient.CreateAsync(options);
+
+        var audioOne = GetTestDataPath("test-audio-small.wav");
+        var audioTwo = GetTestDataPath("test-audio-medium.wav");
+
+        var results = await Task.WhenAll(
+            client.TranscribeAsync(audioOne),
+            client.TranscribeAsync(audioTwo));
+
+        Assert.All(results, static result => Assert.False(string.IsNullOrWhiteSpace(result.Text)));
+    }
+
+    [Fact(Timeout = TimeoutMs)]
+    public async Task ConcurrentTranscribe_WithConcurrencyLimitTwo_ProcessesSharedClientRequests()
+    {
+        var options = new WhisperOptions
+        {
+            Model = KnownWhisperModels.WhisperTinyEn,
+            EnsureModelDownloaded = true,
+            Language = "en",
+            Concurrency = new WhisperConcurrencyOptions
+            {
+                MaximumConcurrentRequests = 2,
+                QueueTimeout = TimeSpan.FromMinutes(2),
+                EnableSessionPooling = true
+            }
+        };
+
+        using var client = await WhisperClient.CreateAsync(options);
+
+        var audioOne = GetTestDataPath("test-audio-small.wav");
+        var audioTwo = GetTestDataPath("test-audio-medium.wav");
+
+        var results = await Task.WhenAll(
+            client.TranscribeAsync(audioOne),
+            client.TranscribeAsync(audioTwo));
+
+        Assert.All(results, static result => Assert.False(string.IsNullOrWhiteSpace(result.Text)));
+    }
 }

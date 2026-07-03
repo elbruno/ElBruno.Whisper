@@ -20,6 +20,7 @@ Transcribe audio to text in .NET using OpenAI's Whisper model. Powered by ONNX R
 - 🚀 **Zero friction** — works out of the box with sensible defaults (tiny.en)
 - 🌍 **Multilingual support** — transcribe 99+ languages with multilingual models
 - 💉 **DI-friendly** — register with `AddWhisper()` in ASP.NET Core
+- 🧵 **Concurrent transcription** — share one client with configurable queueing and pooled inference sessions
 - 📊 **Progress reporting** — track model downloads with real-time callbacks
 - 🎯 **English-optimized models** — dedicated `.en` variants for best accuracy on English audio
 - ⏱️ **Timestamp-aware results** — opt into segment and word timings for subtitle and caption workflows
@@ -114,17 +115,40 @@ Console.WriteLine($"✓ Transcribed: {result.Text}");
 
 ## Dependency Injection
 
-Register Whisper in ASP.NET Core or other DI-enabled applications:
+Register Whisper options in ASP.NET Core or other DI-enabled applications:
 
 ```csharp
 builder.Services.AddWhisper(options =>
 {
     options.Model = KnownWhisperModels.WhisperBaseEn;
+    options.Concurrency.MaximumConcurrentRequests = 2;
+});
+```
+
+`AddWhisper()` registers `WhisperOptions`. Create and share a `WhisperClient` yourself where you control startup and disposal.
+
+## Thread Safety and Concurrency
+
+`WhisperClient` can now be shared across concurrent callers. By default it still processes one transcription at a time. Raise the concurrency limit to allow parallel work and reuse pooled ONNX sessions:
+
+```csharp
+using var client = await WhisperClient.CreateAsync(new WhisperOptions
+{
+    Model = KnownWhisperModels.WhisperTinyEn,
+    Concurrency = new WhisperConcurrencyOptions
+    {
+        MaximumConcurrentRequests = 2,
+        QueueTimeout = TimeSpan.FromSeconds(15),
+        EnableSessionPooling = true
+    }
 });
 
-// Inject WhisperClient anywhere
-public class TranscriptionService(WhisperClient whisper) { ... }
+var results = await Task.WhenAll(
+    client.TranscribeAsync("audio-1.wav"),
+    client.TranscribeAsync("audio-2.wav"));
 ```
+
+If all inference slots are busy longer than `QueueTimeout`, `TranscribeAsync` throws `TimeoutException`. Cancelling the request also aborts queue waiting and the next safe decode checkpoint.
 
 ## Transcription Result
 
