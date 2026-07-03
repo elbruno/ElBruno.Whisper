@@ -221,4 +221,50 @@ public class TranscriptionSegmentTests
 
         Assert.Equal(string.Empty, segment.Text);
     }
+
+    [Fact]
+    public void TranscriptionSegment_DefaultWords_IsEmpty()
+    {
+        var segment = new TranscriptionSegment
+        {
+            Start = TimeSpan.Zero,
+            End = TimeSpan.FromSeconds(1),
+            Text = "Hello"
+        };
+
+        Assert.NotNull(segment.Words);
+        Assert.Empty(segment.Words);
+    }
+
+    [Fact]
+    public void TranscriptionSegment_CanSetWords()
+    {
+        var words = new[]
+        {
+            new TranscriptionWord
+            {
+                Start = TimeSpan.Zero,
+                End = TimeSpan.FromSeconds(0.5),
+                Text = "Hello"
+            },
+            new TranscriptionWord
+            {
+                Start = TimeSpan.FromSeconds(0.5),
+                End = TimeSpan.FromSeconds(1),
+                Text = "world"
+            }
+        };
+
+        var segment = new TranscriptionSegment
+        {
+            Start = TimeSpan.Zero,
+            End = TimeSpan.FromSeconds(1),
+            Text = "Hello world",
+            Words = words
+        };
+
+        Assert.Equal(2, segment.Words.Count);
+        Assert.Equal("Hello", segment.Words[0].Text);
+        Assert.Equal("world", segment.Words[1].Text);
+    }
 }

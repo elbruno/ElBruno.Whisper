@@ -47,7 +47,8 @@ public sealed class WhisperOptions
 
     /// <summary>
     /// If true, extract timestamp information from the model output.
-    /// Results will include <see cref="TranscriptionResult.Segments"/> with start/end times.
+    /// Results will include <see cref="TranscriptionResult.Segments"/> and
+    /// <see cref="TranscriptionResult.Words"/> with start/end times.
     /// Defaults to false for backward compatibility.
     /// </summary>
     public bool EnableTimestamps { get; set; }

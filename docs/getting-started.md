@@ -102,6 +102,9 @@ var options = new WhisperOptions
     
     // Language hint (ISO 639-1 code, e.g., "en", "es", "fr")
     Language = null,
+
+    // Include segment and word timestamps in the response
+    EnableTimestamps = false,
     
     // Temperature for sampling (0-1, higher = more varied)
     Temperature = 0.0f
@@ -150,10 +153,15 @@ Console.WriteLine(result.Text);
 
 ### With Language Hints
 
-If you know the audio language, pass it to improve accuracy:
+If you know the audio language, set it in the client options to improve accuracy:
 
 ```csharp
-var result = await client.TranscribeAsync("spanish-audio.wav", language: "es");
+using var client = await WhisperClient.CreateAsync(new WhisperOptions
+{
+    Language = "es"
+});
+
+var result = await client.TranscribeAsync("spanish-audio.wav");
 ```
 
 ### Accessing Result Details
@@ -170,6 +178,29 @@ string? language = result.DetectedLanguage;
 // Audio duration
 TimeSpan duration = result.Duration;
 ```
+
+### With Segment and Word Timestamps
+
+```csharp
+using var client = await WhisperClient.CreateAsync(new WhisperOptions
+{
+    EnableTimestamps = true
+});
+
+var result = await client.TranscribeAsync("audio.wav");
+
+foreach (var segment in result.Segments ?? [])
+{
+    Console.WriteLine($"{segment.Start:mm\\:ss\\.ff} - {segment.End:mm\\:ss\\.ff}: {segment.Text}");
+
+    foreach (var word in segment.Words)
+    {
+        Console.WriteLine($"  {word.Start:mm\\:ss\\.ff} - {word.End:mm\\:ss\\.ff}: {word.Text}");
+    }
+}
+```
+
+Word timings are derived from the timestamped transcript spans returned by Whisper. If a model returns text without explicit spans, the response falls back to a single full-duration segment and derives word timings within that range.
 
 ## Dependency Injection (ASP.NET Core)
 

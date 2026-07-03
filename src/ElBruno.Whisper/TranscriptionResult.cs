@@ -24,4 +24,9 @@ public sealed record TranscriptionResult
     /// Timestamped segments, if timestamp extraction was enabled.
     /// </summary>
     public IReadOnlyList<TranscriptionSegment>? Segments { get; init; }
+
+    /// <summary>
+    /// Flattened word-level timestamps, if timestamp extraction was enabled.
+    /// </summary>
+    public IReadOnlyList<TranscriptionWord>? Words { get; init; }
 }

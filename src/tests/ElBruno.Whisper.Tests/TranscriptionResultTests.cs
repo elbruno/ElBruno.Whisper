@@ -136,6 +136,17 @@ public class TranscriptionResultTests
     }
 
     [Fact]
+    public void DefaultWords_ShouldBeNull()
+    {
+        var result = new TranscriptionResult
+        {
+            Text = "Hello"
+        };
+
+        Assert.Null(result.Words);
+    }
+
+    [Fact]
     public void CanSetSegments()
     {
         var segments = new List<TranscriptionSegment>
@@ -144,13 +155,31 @@ public class TranscriptionResultTests
             {
                 Start = TimeSpan.FromSeconds(0),
                 End = TimeSpan.FromSeconds(1),
-                Text = "Hello"
+                Text = "Hello",
+                Words =
+                [
+                    new TranscriptionWord
+                    {
+                        Start = TimeSpan.FromSeconds(0),
+                        End = TimeSpan.FromSeconds(1),
+                        Text = "Hello"
+                    }
+                ]
             },
             new()
             {
                 Start = TimeSpan.FromSeconds(1),
                 End = TimeSpan.FromSeconds(2),
-                Text = "world"
+                Text = "world",
+                Words =
+                [
+                    new TranscriptionWord
+                    {
+                        Start = TimeSpan.FromSeconds(1),
+                        End = TimeSpan.FromSeconds(2),
+                        Text = "world"
+                    }
+                ]
             }
         };
 
@@ -164,6 +193,37 @@ public class TranscriptionResultTests
         Assert.Equal(2, result.Segments.Count);
         Assert.Equal("Hello", result.Segments[0].Text);
         Assert.Equal("world", result.Segments[1].Text);
+    }
+
+    [Fact]
+    public void CanSetWords()
+    {
+        var words = new List<TranscriptionWord>
+        {
+            new()
+            {
+                Start = TimeSpan.Zero,
+                End = TimeSpan.FromSeconds(0.5),
+                Text = "Hello"
+            },
+            new()
+            {
+                Start = TimeSpan.FromSeconds(0.5),
+                End = TimeSpan.FromSeconds(1),
+                Text = "world"
+            }
+        };
+
+        var result = new TranscriptionResult
+        {
+            Text = "Hello world",
+            Words = words
+        };
+
+        Assert.NotNull(result.Words);
+        Assert.Equal(2, result.Words.Count);
+        Assert.Equal("Hello", result.Words[0].Text);
+        Assert.Equal("world", result.Words[1].Text);
     }
 
     [Fact]
