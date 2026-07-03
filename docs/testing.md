@@ -14,7 +14,7 @@ These tests verify individual components without downloading models or accessing
 
 **Coverage:**
 - `Audio/` — WAV parsing, audio processing, mel spectrogram generation
-- `Inference/` — ONNX inference session, cache management, token handling
+- `Inference/` — ONNX inference session, cache management, pooled session concurrency, metrics
 - `WhisperClientTests.cs` — Client initialization and error handling
 - Model definitions, options validation, tokenization
 
@@ -34,6 +34,7 @@ These tests download real Whisper models from HuggingFace and perform end-to-end
 **Coverage:**
 - Real model loading and caching
 - Complete audio-to-text transcription
+- Shared-client concurrency limits at 1 and 2
 - Language detection
 - Duration calculation
 - Error handling with actual models
@@ -137,8 +138,8 @@ dotnet test ElBruno.Whisper.slnx /p:CollectCoverage=true /p:CoverletOutputFormat
 The repository uses GitHub Actions (`.github/workflows/ci.yml`) to:
 
 1. **Trigger:** On push to `main` or pull request
-2. **Setup:** .NET 8.0 and .NET 10.0 SDKs
-3. **Build:** `dotnet build ElBruno.Whisper.slnx --configuration Release`
+2. **Setup:** .NET 8.0 SDK
+3. **Build:** Library and test projects targeting `net8.0`
 4. **Test (Unit):** `dotnet test --filter "Category!=Integration"` — Fast verification
 5. **Artifacts:** Test results uploaded for analysis
 
@@ -147,7 +148,7 @@ The repository uses GitHub Actions (`.github/workflows/ci.yml`) to:
 The repository uses GitHub Actions (`.github/workflows/publish.yml`) to:
 
 1. **Trigger:** On GitHub Release or manual workflow dispatch
-2. **Build & Test:** Full release build with unit tests only
+2. **Build & Test:** Release build plus unit tests
 3. **Pack:** NuGet package creation
 4. **Publish:** Push to NuGet.org with OIDC authentication
 
@@ -247,9 +248,9 @@ public class MyIntegrationTests
 
 As of the latest version:
 
-- **Total tests:** 218 (varies with recent changes)
-- **Unit tests:** ~200
-- **Integration tests:** ~18
+- **Total tests:** Varies with recent changes
+- **Unit tests:** Include dedicated coverage for pooled session reuse, queue timeout, and cancellation
+- **Integration tests:** Include shared-client concurrency coverage with real models
 - **Code coverage:** Core library coverage via integration tests
 - **xUnit framework:** v2.9.3
 - **Test SDK:** v17.12.0

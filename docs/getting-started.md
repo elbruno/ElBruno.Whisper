@@ -107,7 +107,15 @@ var options = new WhisperOptions
     EnableTimestamps = false,
     
     // Temperature for sampling (0-1, higher = more varied)
-    Temperature = 0.0f
+    Temperature = 0.0f,
+
+    // Share a client safely across concurrent callers
+    Concurrency = new WhisperConcurrencyOptions
+    {
+        MaximumConcurrentRequests = 2,
+        QueueTimeout = TimeSpan.FromSeconds(15),
+        EnableSessionPooling = true
+    }
 };
 
 using var client = await WhisperClient.CreateAsync(options);
@@ -139,6 +147,29 @@ var downloadProgress = new Progress<ElBruno.HuggingFace.DownloadProgress>(p =>
 
 using var client = await WhisperClient.CreateAsync(progress: downloadProgress);
 ```
+
+## Concurrent Transcription
+
+`WhisperClient` is safe to share across concurrent callers. The default concurrency limit is 1, which preserves serialized inference. Increase it when you want a shared client to process multiple requests in parallel:
+
+```csharp
+using var client = await WhisperClient.CreateAsync(new WhisperOptions
+{
+    Model = KnownWhisperModels.WhisperTinyEn,
+    Concurrency = new WhisperConcurrencyOptions
+    {
+        MaximumConcurrentRequests = 2,
+        QueueTimeout = TimeSpan.FromSeconds(15),
+        EnableSessionPooling = true
+    }
+});
+
+var results = await Task.WhenAll(
+    client.TranscribeAsync("call-1.wav"),
+    client.TranscribeAsync("call-2.wav"));
+```
+
+If all inference slots stay busy longer than `QueueTimeout`, the waiting request throws `TimeoutException`. Cancelling the request also stops queue waiting and is observed during decoding at the next safe checkpoint.
 
 ## Transcription
 
@@ -204,25 +235,18 @@ Word timings are derived from the timestamped transcript spans returned by Whisp
 
 ## Dependency Injection (ASP.NET Core)
 
-Register Whisper in your service container:
+Register Whisper options in your service container:
 
 ```csharp
 // Program.cs
 builder.Services.AddWhisper(options =>
 {
     options.Model = KnownWhisperModels.WhisperSmallEn;
+    options.Concurrency.MaximumConcurrentRequests = 2;
 });
-
-// Inject into services
-public class AudioService(WhisperClient whisper)
-{
-    public async Task<string> TranscribeAsync(string filePath)
-    {
-        var result = await whisper.TranscribeAsync(filePath);
-        return result.Text;
-    }
-}
 ```
+
+`AddWhisper()` registers `WhisperOptions`. Create and own the `WhisperClient` in the service that needs it so you can decide whether to share one client and how to dispose it.
 
 ## Troubleshooting
 

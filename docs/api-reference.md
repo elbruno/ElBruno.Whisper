@@ -4,6 +4,8 @@
 
 Main class for speech-to-text transcription.
 
+`WhisperClient` is safe to share across concurrent callers. Concurrency behavior is configured through `WhisperOptions.Concurrency`.
+
 ### Creating a Client
 
 ```csharp
@@ -52,14 +54,15 @@ Console.WriteLine(result.Text);
 - `FileNotFoundException` — Audio file not found
 - `InvalidOperationException` — Model failed to load or transcription error
 - `OperationCanceledException` — Transcription was cancelled
+- `TimeoutException` — The request waited longer than `WhisperOptions.Concurrency.QueueTimeout`
 
 #### Dispose
 
 Release model and ONNX Runtime resources.
 
 ```csharp
-await client.DisposeAsync();
-// or with `using` statement
+client.Dispose();
+// or use a `using` statement
 using var client = await WhisperClient.CreateAsync();
 ```
 
@@ -92,6 +95,9 @@ public class WhisperOptions
 
     // Include segment and word timestamps
     public bool EnableTimestamps { get; set; }
+
+    // Concurrent transcription settings
+    public WhisperConcurrencyOptions Concurrency { get; set; } = new();
 }
 ```
 
@@ -107,6 +113,38 @@ var options = new WhisperOptions
 };
 using var client = await WhisperClient.CreateAsync(options);
 ```
+
+---
+
+## WhisperConcurrencyOptions
+
+Controls how a shared `WhisperClient` handles concurrent requests.
+
+```csharp
+public sealed class WhisperConcurrencyOptions
+{
+    public int MaximumConcurrentRequests { get; set; } = 1;
+    public TimeSpan QueueTimeout { get; set; } = TimeSpan.FromSeconds(30);
+    public bool EnableSessionPooling { get; set; } = true;
+}
+```
+
+### Example
+
+```csharp
+var options = new WhisperOptions
+{
+    Model = KnownWhisperModels.WhisperTinyEn,
+    Concurrency = new WhisperConcurrencyOptions
+    {
+        MaximumConcurrentRequests = 2,
+        QueueTimeout = TimeSpan.FromSeconds(15),
+        EnableSessionPooling = true
+    }
+};
+```
+
+`MaximumConcurrentRequests` controls how many transcriptions may run in parallel. `QueueTimeout` bounds how long a caller may wait for a free inference slot. `EnableSessionPooling` reuses ONNX sessions between requests to avoid paying the full session-creation cost every time.
 
 ---
 
@@ -241,7 +279,7 @@ public class WhisperModelDefinition
 
 ### AddWhisper
 
-Register WhisperClient in ASP.NET Core or other DI containers.
+Register Whisper options in ASP.NET Core or other DI containers.
 
 ```csharp
 // Program.cs
@@ -249,18 +287,11 @@ builder.Services.AddWhisper(options =>
 {
     options.Model = KnownWhisperModels.WhisperSmallEn;
     options.Language = "en";
+    options.Concurrency.MaximumConcurrentRequests = 2;
 });
-
-// Inject into services
-public class MyService(WhisperClient whisper)
-{
-    public async Task<string> Transcribe(string filePath)
-    {
-        var result = await whisper.TranscribeAsync(filePath);
-        return result.Text;
-    }
-}
 ```
+
+`AddWhisper()` registers `WhisperOptions`. Create and manage the lifetime of `WhisperClient` yourself so you can decide when to share it and when to dispose it.
 
 ---
 
@@ -334,5 +365,9 @@ catch (InvalidOperationException ex)
 catch (OperationCanceledException ex)
 {
     Console.WriteLine($"Transcription cancelled: {ex.Message}");
+}
+catch (TimeoutException ex)
+{
+    Console.WriteLine($"Transcription queue timeout: {ex.Message}");
 }
 ```

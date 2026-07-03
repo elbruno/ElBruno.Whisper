@@ -1,38 +1,29 @@
-using System.Text.Json;
 using ElBruno.HuggingFace;
 using ElBruno.Whisper.Audio;
 using ElBruno.Whisper.Inference;
-using ElBruno.Whisper.Tokenizer;
 
 namespace ElBruno.Whisper;
 
 /// <summary>
 /// Main client for Whisper speech-to-text transcription and translation.
+/// The client is safe to share across concurrent callers when configured through
+/// <see cref="WhisperOptions.Concurrency"/>.
 /// </summary>
 public sealed class WhisperClient : IDisposable
 {
     private readonly WhisperOptions _options;
     private readonly AudioProcessor _audioProcessor;
-    private readonly WhisperTokenizer _tokenizer;
-    private readonly WhisperInferenceSession _inference;
-    private readonly int[] _configSuppressTokens;
-    private readonly int[] _beginSuppressTokens;
+    private readonly WhisperModelRuntime _runtime;
     private bool _disposed;
 
     private WhisperClient(
         WhisperOptions options,
         AudioProcessor audioProcessor,
-        WhisperTokenizer tokenizer,
-        WhisperInferenceSession inference,
-        int[] configSuppressTokens,
-        int[] beginSuppressTokens)
+        WhisperModelRuntime runtime)
     {
         _options = options;
         _audioProcessor = audioProcessor;
-        _tokenizer = tokenizer;
-        _inference = inference;
-        _configSuppressTokens = configSuppressTokens;
-        _beginSuppressTokens = beginSuppressTokens;
+        _runtime = runtime;
     }
 
     /// <summary>
@@ -44,44 +35,11 @@ public sealed class WhisperClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         options ??= new WhisperOptions();
-
-        // Resolve model path
-        string modelPath;
-        if (!string.IsNullOrEmpty(options.ModelPath))
-        {
-            modelPath = options.ModelPath;
-        }
-        else
-        {
-            // Use cache directory
-            var cacheDir = options.CacheDirectory ?? DefaultPathHelper.GetDefaultCacheDirectory("ElBruno/Whisper");
-            modelPath = Path.Combine(cacheDir, options.Model.Id);
-
-            // Download model if needed
-            if (options.EnsureModelDownloaded)
-            {
-                await DownloadModelAsync(options.Model, cacheDir, progress, cancellationToken);
-            }
-        }
-
-        // Load components
         var audioProcessor = new AudioProcessor();
-        
-        var tokenizerPath = Path.Combine(modelPath, "tokenizer.json");
-        var tokenizer = new WhisperTokenizer(tokenizerPath);
+        var runtime = await WhisperModelRuntime.CreateAsync(options, progress, cancellationToken)
+            .ConfigureAwait(false);
 
-        var encoderPath = Path.Combine(modelPath, "onnx", "encoder_model.onnx");
-        var decoderPath = Path.Combine(modelPath, "onnx", "decoder_model_merged.onnx");
-        var inference = new WhisperInferenceSession(
-            encoderPath, decoderPath,
-            options.Model.NumDecoderLayers,
-            options.Model.EncoderDimension);
-
-        // Load suppress_tokens and begin_suppress_tokens from config.json
-        var (configSuppressTokens, beginSuppressTokens) = LoadSuppressConfig(modelPath);
-
-        return new WhisperClient(options, audioProcessor, tokenizer, inference,
-            configSuppressTokens, beginSuppressTokens);
+        return new WhisperClient(options, audioProcessor, runtime);
     }
 
     /// <summary>
@@ -94,26 +52,9 @@ public sealed class WhisperClient : IDisposable
         if (!File.Exists(audioFilePath))
             throw new FileNotFoundException("Audio file not found", audioFilePath);
 
-        return Task.Run(() =>
-        {
-            // Process audio to mel spectrogram
-            var (melSpec, audioDuration) = _audioProcessor.ProcessAudioFile(audioFilePath);
-
-            // Get initial tokens
-            var initialTokens = GetInitialTokens();
-
-            // Run inference
-            var tokens = _inference.Inference(
-                melSpec,
-                initialTokens,
-                _options.MaxTokens,
-                _tokenizer.EotToken,
-                GetSuppressTokens(),
-                _beginSuppressTokens
-            );
-
-            return BuildResult(tokens, audioDuration);
-        }, cancellationToken);
+        return TranscribeCoreAsync(
+            () => _audioProcessor.ProcessAudioFile(audioFilePath),
+            cancellationToken);
     }
 
     /// <summary>
@@ -123,38 +64,21 @@ public sealed class WhisperClient : IDisposable
         Stream audioStream,
         CancellationToken cancellationToken = default)
     {
-        return Task.Run(() =>
-        {
-            // Process audio to mel spectrogram
-            var (melSpec, audioDuration) = _audioProcessor.ProcessAudioStream(audioStream);
-
-            // Get initial tokens
-            var initialTokens = GetInitialTokens();
-
-            // Run inference
-            var tokens = _inference.Inference(
-                melSpec,
-                initialTokens,
-                _options.MaxTokens,
-                _tokenizer.EotToken,
-                GetSuppressTokens(),
-                _beginSuppressTokens
-            );
-
-            return BuildResult(tokens, audioDuration);
-        }, cancellationToken);
+        return TranscribeCoreAsync(
+            () => _audioProcessor.ProcessAudioStream(audioStream),
+            cancellationToken);
     }
 
     private TranscriptionResult BuildResult(int[] tokens, TimeSpan audioDuration)
     {
         if (_options.EnableTimestamps)
         {
-            var (text, decodedSegments) = _tokenizer.DecodeWithTimestamps(tokens);
+            var (text, decodedSegments) = _runtime.Tokenizer.DecodeWithTimestamps(tokens);
             var segments = decodedSegments.Count > 0 || string.IsNullOrWhiteSpace(text)
                 ? decodedSegments
                 : new List<TranscriptionSegment>
                 {
-                    _tokenizer.CreateTimedSegment(TimeSpan.Zero, audioDuration, text)
+                    _runtime.Tokenizer.CreateTimedSegment(TimeSpan.Zero, audioDuration, text)
                 };
 
             return new TranscriptionResult
@@ -169,7 +93,7 @@ public sealed class WhisperClient : IDisposable
 
         return new TranscriptionResult
         {
-            Text = _tokenizer.Decode(tokens),
+            Text = _runtime.Tokenizer.Decode(tokens),
             DetectedLanguage = _options.Language,
             Duration = audioDuration
         };
@@ -178,7 +102,7 @@ public sealed class WhisperClient : IDisposable
     private int[] GetInitialTokens()
     {
         var (sot, transcribe, translate, noTimestamps, language) = 
-            _tokenizer.GetSpecialTokenIds(_options.Language);
+            _runtime.Tokenizer.GetSpecialTokenIds(_options.Language);
 
         var tokens = new List<int> { sot };
 
@@ -208,12 +132,12 @@ public sealed class WhisperClient : IDisposable
     /// </summary>
     private int[] GetSuppressTokens()
     {
-        var suppress = new HashSet<int>(_configSuppressTokens);
+        var suppress = new HashSet<int>(_runtime.ConfigSuppressTokens);
 
         // Only suppress timestamp tokens when timestamps are disabled
         if (!_options.EnableTimestamps)
         {
-            var (_, _, _, noTimestamps, _) = _tokenizer.GetSpecialTokenIds();
+            var (_, _, _, noTimestamps, _) = _runtime.Tokenizer.GetSpecialTokenIds();
             const int vocabSize = 51865;
             for (int t = noTimestamps + 1; t < vocabSize; t++)
             {
@@ -225,82 +149,49 @@ public sealed class WhisperClient : IDisposable
     }
 
     /// <summary>
-    /// Reads suppress_tokens and begin_suppress_tokens from the model's config.json.
-    /// Falls back to reasonable defaults if config.json is not available.
-    /// </summary>
-    private static (int[] SuppressTokens, int[] BeginSuppressTokens) LoadSuppressConfig(string modelPath)
-    {
-        var configPath = Path.Combine(modelPath, "config.json");
-        if (!File.Exists(configPath))
-        {
-            return (Array.Empty<int>(), new[] { 220, 50256 });
-        }
-
-        try
-        {
-            var json = File.ReadAllText(configPath);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            var suppressTokens = Array.Empty<int>();
-            if (root.TryGetProperty("suppress_tokens", out var suppressProp))
-            {
-                suppressTokens = suppressProp.EnumerateArray()
-                    .Select(e => e.GetInt32())
-                    .ToArray();
-            }
-
-            var beginSuppressTokens = new[] { 220, 50256 };
-            if (root.TryGetProperty("begin_suppress_tokens", out var beginProp))
-            {
-                beginSuppressTokens = beginProp.EnumerateArray()
-                    .Select(e => e.GetInt32())
-                    .ToArray();
-            }
-
-            return (suppressTokens, beginSuppressTokens);
-        }
-        catch
-        {
-            return (Array.Empty<int>(), new[] { 220, 50256 });
-        }
-    }
-
-    private static async Task DownloadModelAsync(
-        WhisperModelDefinition model,
-        string cacheDir,
-        IProgress<DownloadProgress>? progress,
-        CancellationToken cancellationToken)
-    {
-        var modelDir = Path.Combine(cacheDir, model.Id);
-
-        // Check if already downloaded
-        var allFilesExist = model.RequiredFiles.All(f => File.Exists(Path.Combine(modelDir, f)));
-        if (allFilesExist)
-            return;
-
-        using var downloader = new HuggingFaceDownloader();
-        var request = new DownloadRequest
-        {
-            RepoId = model.HuggingFaceRepoId,
-            LocalDirectory = modelDir,
-            RequiredFiles = model.RequiredFiles,
-            OptionalFiles = model.OptionalFiles,
-            Progress = progress
-        };
-
-        await downloader.DownloadFilesAsync(request, cancellationToken);
-    }
-
-    /// <summary>
     /// Release ONNX Runtime resources held by the client.
     /// </summary>
     public void Dispose()
     {
         if (!_disposed)
         {
-            _inference?.Dispose();
+            _runtime.Dispose();
             _disposed = true;
         }
+    }
+
+    private Task<TranscriptionResult> TranscribeCoreAsync(
+        Func<(float[] MelSpectrogram, TimeSpan Duration)> audioProcessor,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+
+        return Task.Run(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var (melSpec, audioDuration) = audioProcessor();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var initialTokens = GetInitialTokens();
+            var suppressTokens = GetSuppressTokens();
+            var tokens = await _runtime.RunInferenceAsync(
+                    melSpec,
+                    initialTokens,
+                    _options.MaxTokens,
+                    _runtime.Tokenizer.EotToken,
+                    suppressTokens,
+                    _runtime.BeginSuppressTokens,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return BuildResult(tokens, audioDuration);
+        }, cancellationToken);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, typeof(WhisperClient));
     }
 }

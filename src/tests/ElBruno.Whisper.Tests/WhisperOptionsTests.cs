@@ -169,4 +169,33 @@ public class WhisperOptionsTests
 
         Assert.False(options.EnableTimestamps);
     }
+
+    [Fact]
+    public void DefaultConcurrency_UsesSingleRequestWithSessionPooling()
+    {
+        var options = new WhisperOptions();
+
+        Assert.NotNull(options.Concurrency);
+        Assert.Equal(1, options.Concurrency.MaximumConcurrentRequests);
+        Assert.Equal(TimeSpan.FromSeconds(30), options.Concurrency.QueueTimeout);
+        Assert.True(options.Concurrency.EnableSessionPooling);
+    }
+
+    [Fact]
+    public void Concurrency_CanBeCustomized()
+    {
+        var options = new WhisperOptions
+        {
+            Concurrency = new WhisperConcurrencyOptions
+            {
+                MaximumConcurrentRequests = 2,
+                QueueTimeout = TimeSpan.FromSeconds(5),
+                EnableSessionPooling = false
+            }
+        };
+
+        Assert.Equal(2, options.Concurrency.MaximumConcurrentRequests);
+        Assert.Equal(TimeSpan.FromSeconds(5), options.Concurrency.QueueTimeout);
+        Assert.False(options.Concurrency.EnableSessionPooling);
+    }
 }

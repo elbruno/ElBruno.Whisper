@@ -52,4 +52,10 @@ public sealed class WhisperOptions
     /// Defaults to false for backward compatibility.
     /// </summary>
     public bool EnableTimestamps { get; set; }
+
+    /// <summary>
+    /// Controls concurrent access to the underlying inference sessions.
+    /// Defaults to single-request execution with a 30-second queue timeout.
+    /// </summary>
+    public WhisperConcurrencyOptions Concurrency { get; set; } = new();
 }

@@ -9,6 +9,7 @@ namespace ElBruno.Whisper.Inference;
 /// and an Optimum-style merged decoder with KV caching for subsequent steps.
 /// </summary>
 internal sealed class WhisperInferenceSession : IDisposable
+    , IWhisperInferenceSession
 {
     private readonly InferenceSession _encoderSession;
     private readonly InferenceSession _firstStepDecoderSession;
@@ -92,11 +93,14 @@ internal sealed class WhisperInferenceSession : IDisposable
     /// Run inference on audio features.
     /// </summary>
     public int[] Inference(float[] melSpectrogram, int[] initialTokens, int maxTokens, int eotToken,
-        int[]? suppressTokens = null, int[]? beginSuppressTokens = null)
+        int[]? suppressTokens = null, int[]? beginSuppressTokens = null,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var encoderHiddenStates = RunEncoder(melSpectrogram);
+        cancellationToken.ThrowIfCancellationRequested();
         var tokens = RunDecoder(encoderHiddenStates, initialTokens, maxTokens, eotToken,
-            suppressTokens, beginSuppressTokens);
+            suppressTokens, beginSuppressTokens, cancellationToken);
         return tokens;
     }
 
@@ -113,7 +117,8 @@ internal sealed class WhisperInferenceSession : IDisposable
     }
 
     private int[] RunDecoder(float[] encoderHiddenStates, int[] initialTokens, int maxTokens, int eotToken,
-        int[]? suppressTokens = null, int[]? beginSuppressTokens = null)
+        int[]? suppressTokens = null, int[]? beginSuppressTokens = null,
+        CancellationToken cancellationToken = default)
     {
         var tokens = new List<int>(initialTokens);
 
@@ -135,6 +140,7 @@ internal sealed class WhisperInferenceSession : IDisposable
 
         for (int step = 0; step < maxGenerateSteps; step++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var isFirstStep = step == 0;
 
             // First step: full initial sequence. Cached steps: only the last generated token.
