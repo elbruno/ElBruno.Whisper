@@ -1,0 +1,20 @@
+{
+  "model": {
+    "vocab": {
+      "\u0120This": 770,
+      "\u0120a": 257,
+      "\u0120is": 318,
+      "\u0120world": 995,
+      "\u0120test": 1332,
+      "\u0120Hello": 31373
+    }
+  },
+  "added_tokens": [
+    { "id": 50257, "content": "<|endoftext|>" },
+    { "id": 50258, "content": "<|startoftranscript|>" },
+    { "id": 50259, "content": "<|en|>" },
+    { "id": 50358, "content": "<|translate|>" },
+    { "id": 50359, "content": "<|transcribe|>" },
+    { "id": 50363, "content": "<|notimestamps|>" }
+  ]
+}

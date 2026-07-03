@@ -28,20 +28,23 @@ Transcribe an audio file to text.
 ```csharp
 public async Task<TranscriptionResult> TranscribeAsync(
     string audioFilePath,
-    string? language = null,
     CancellationToken cancellationToken = default);
 ```
 
 **Parameters:**
 - `audioFilePath` (string) — Path to audio file (WAV, MP3, etc.)
-- `language` (string?, optional) — ISO 639-1 language code (e.g., "en", "es", "fr")
 - `cancellationToken` (CancellationToken, optional) — For cancellation support
 
 **Returns:** `TranscriptionResult` containing transcribed text and metadata
 
 **Example:**
 ```csharp
-var result = await client.TranscribeAsync("audio.wav", language: "es");
+using var client = await WhisperClient.CreateAsync(new WhisperOptions
+{
+    Language = "es"
+});
+
+var result = await client.TranscribeAsync("audio.wav");
 Console.WriteLine(result.Text);
 ```
 
@@ -77,9 +80,18 @@ public class WhisperOptions
     
     // Language hint (ISO 639-1 code)
     public string? Language { get; set; }
+
+    // Translate audio to English instead of transcribing
+    public bool Translate { get; set; }
+
+    // Maximum number of output tokens
+    public int MaxTokens { get; set; } = 448;
     
     // Sampling temperature 0-1 (default: 0.0 for deterministic)
     public float Temperature { get; set; } = 0.0f;
+
+    // Include segment and word timestamps
+    public bool EnableTimestamps { get; set; }
 }
 ```
 
@@ -90,6 +102,7 @@ var options = new WhisperOptions
 {
     Model = KnownWhisperModels.WhisperMedium,
     Language = "en",
+    EnableTimestamps = true,
     Temperature = 0.2f
 };
 using var client = await WhisperClient.CreateAsync(options);
@@ -147,6 +160,12 @@ public class TranscriptionResult
     
     // Duration of audio
     public TimeSpan Duration { get; set; }
+
+    // Timestamped segments when EnableTimestamps is true
+    public IReadOnlyList<TranscriptionSegment>? Segments { get; set; }
+
+    // Flattened timestamped words when EnableTimestamps is true
+    public IReadOnlyList<TranscriptionWord>? Words { get; set; }
 }
 ```
 
@@ -158,7 +177,37 @@ var result = await client.TranscribeAsync("audio.wav");
 Console.WriteLine($"Text: {result.Text}");
 Console.WriteLine($"Language: {result.DetectedLanguage}");
 Console.WriteLine($"Duration: {result.Duration.TotalSeconds:F1}s");
+
+foreach (var word in result.Words ?? [])
+{
+    Console.WriteLine($"{word.Start:mm\\:ss\\.ff} - {word.End:mm\\:ss\\.ff}: {word.Text}");
+}
 ```
+
+### TranscriptionSegment
+
+```csharp
+public class TranscriptionSegment
+{
+    public TimeSpan Start { get; set; }
+    public TimeSpan End { get; set; }
+    public string Text { get; set; }
+    public IReadOnlyList<TranscriptionWord> Words { get; set; }
+}
+```
+
+### TranscriptionWord
+
+```csharp
+public class TranscriptionWord
+{
+    public TimeSpan Start { get; set; }
+    public TimeSpan End { get; set; }
+    public string Text { get; set; }
+}
+```
+
+Word timings are derived from each timestamped transcript span. If a model returns text without explicit spans, the response falls back to a single full-duration segment and derives word timings within that range.
 
 ---
 

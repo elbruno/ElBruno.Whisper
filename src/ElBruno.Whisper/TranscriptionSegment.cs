@@ -19,4 +19,9 @@ public sealed record TranscriptionSegment
     /// The transcribed text for this segment.
     /// </summary>
     public required string Text { get; init; }
+
+    /// <summary>
+    /// Word-level timestamps derived for this segment.
+    /// </summary>
+    public IReadOnlyList<TranscriptionWord> Words { get; init; } = Array.Empty<TranscriptionWord>();
 }

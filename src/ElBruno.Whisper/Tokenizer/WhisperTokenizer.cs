@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace ElBruno.Whisper.Tokenizer;
 
@@ -138,12 +139,7 @@ internal sealed class WhisperTokenizer
                     var segmentText = DecodeTextTokens(currentSegmentTokens);
                     if (!string.IsNullOrWhiteSpace(segmentText))
                     {
-                        segments.Add(new TranscriptionSegment
-                        {
-                            Start = pendingStart.Value,
-                            End = ts,
-                            Text = segmentText
-                        });
+                        segments.Add(CreateTimedSegment(pendingStart.Value, ts, segmentText));
                     }
 
                     pendingStart = null;
@@ -167,17 +163,23 @@ internal sealed class WhisperTokenizer
             var segmentText = DecodeTextTokens(currentSegmentTokens);
             if (!string.IsNullOrWhiteSpace(segmentText))
             {
-                segments.Add(new TranscriptionSegment
-                {
-                    Start = pendingStart.Value,
-                    End = pendingStart.Value,
-                    Text = segmentText
-                });
+                segments.Add(CreateTimedSegment(pendingStart.Value, pendingStart.Value, segmentText));
             }
         }
 
         var fullText = DecodeTextTokens(allTextTokens);
         return (fullText, segments);
+    }
+
+    public TranscriptionSegment CreateTimedSegment(TimeSpan start, TimeSpan end, string text)
+    {
+        return new TranscriptionSegment
+        {
+            Start = start,
+            End = end,
+            Text = text,
+            Words = BuildWords(start, end, text)
+        };
     }
 
     /// <summary>
@@ -189,6 +191,64 @@ internal sealed class WhisperTokenizer
         text = text.Replace("Ġ", " ");
         text = text.Replace("Ċ", "\n");
         return text.Trim();
+    }
+
+    private static IReadOnlyList<TranscriptionWord> BuildWords(TimeSpan start, TimeSpan end, string segmentText)
+    {
+        var matches = Regex.Matches(segmentText, @"\S+");
+        if (matches.Count == 0)
+        {
+            return Array.Empty<TranscriptionWord>();
+        }
+
+        if (matches.Count == 1 || end <= start)
+        {
+            return matches
+                .Select(match => new TranscriptionWord
+                {
+                    Start = start,
+                    End = end,
+                    Text = match.Value
+                })
+                .ToArray();
+        }
+
+        var duration = end - start;
+        var weights = matches
+            .Select(match => Math.Max(1, match.Value.Count(static ch => !char.IsWhiteSpace(ch))))
+            .ToArray();
+        var totalWeight = weights.Sum();
+        var words = new List<TranscriptionWord>(matches.Count);
+        var consumedWeight = 0;
+
+        for (var i = 0; i < matches.Count; i++)
+        {
+            var wordStart = start + ScaleDuration(duration, consumedWeight, totalWeight);
+            consumedWeight += weights[i];
+            var wordEnd = i == matches.Count - 1
+                ? end
+                : start + ScaleDuration(duration, consumedWeight, totalWeight);
+
+            words.Add(new TranscriptionWord
+            {
+                Start = wordStart,
+                End = wordEnd,
+                Text = matches[i].Value
+            });
+        }
+
+        return words;
+    }
+
+    private static TimeSpan ScaleDuration(TimeSpan duration, int consumedWeight, int totalWeight)
+    {
+        if (consumedWeight <= 0 || totalWeight <= 0 || duration <= TimeSpan.Zero)
+        {
+            return TimeSpan.Zero;
+        }
+
+        var scaledTicks = (long)Math.Round(duration.Ticks * (consumedWeight / (double)totalWeight));
+        return TimeSpan.FromTicks(scaledTicks);
     }
 
     /// <summary>

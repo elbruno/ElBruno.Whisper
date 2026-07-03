@@ -187,6 +187,13 @@ public class WhisperTokenizerTimestampTests : IDisposable
         Assert.Equal(TimeSpan.FromSeconds(0.0), segments[0].Start);
         Assert.Equal(TimeSpan.FromSeconds(1.0), segments[0].End);
         Assert.Equal("Hello world", segments[0].Text);
+        Assert.Equal(2, segments[0].Words.Count);
+        Assert.Equal("Hello", segments[0].Words[0].Text);
+        Assert.Equal("world", segments[0].Words[1].Text);
+        Assert.Equal(TimeSpan.FromSeconds(0.0), segments[0].Words[0].Start);
+        Assert.Equal(TimeSpan.FromSeconds(0.5), segments[0].Words[0].End);
+        Assert.Equal(TimeSpan.FromSeconds(0.5), segments[0].Words[1].Start);
+        Assert.Equal(TimeSpan.FromSeconds(1.0), segments[0].Words[1].End);
     }
 
     [Fact]
@@ -211,6 +218,7 @@ public class WhisperTokenizerTimestampTests : IDisposable
         Assert.Equal(TimeSpan.FromSeconds(0.0), segments[0].Start);
         Assert.Equal(TimeSpan.FromSeconds(1.0), segments[0].End);
         Assert.Equal("Hello", segments[0].Text);
+        Assert.Single(segments[0].Words);
 
         Assert.Equal(TimeSpan.FromSeconds(1.0), segments[1].Start);
         Assert.Equal(TimeSpan.FromSeconds(2.0), segments[1].End);
@@ -271,6 +279,9 @@ public class WhisperTokenizerTimestampTests : IDisposable
         Assert.Equal(TimeSpan.FromSeconds(0.0), segments[0].Start);
         Assert.Equal(TimeSpan.FromSeconds(0.0), segments[0].End);
         Assert.Equal("Hello", segments[0].Text);
+        Assert.Single(segments[0].Words);
+        Assert.Equal(TimeSpan.Zero, segments[0].Words[0].Start);
+        Assert.Equal(TimeSpan.Zero, segments[0].Words[0].End);
     }
 
     [Fact]
@@ -310,6 +321,13 @@ public class WhisperTokenizerTimestampTests : IDisposable
         Assert.Equal("This is a test", segments[0].Text);
         Assert.Equal(TimeSpan.FromSeconds(0.0), segments[0].Start);
         Assert.Equal(TimeSpan.FromSeconds(2.0), segments[0].End);
+        Assert.Equal(4, segments[0].Words.Count);
+        Assert.Equal("This", segments[0].Words[0].Text);
+        Assert.Equal("is", segments[0].Words[1].Text);
+        Assert.Equal("a", segments[0].Words[2].Text);
+        Assert.Equal("test", segments[0].Words[3].Text);
+        Assert.Equal(TimeSpan.FromSeconds(0.0), segments[0].Words[0].Start);
+        Assert.Equal(TimeSpan.FromSeconds(2.0), segments[0].Words[3].End);
     }
 
     [Fact]
@@ -347,5 +365,6 @@ public class WhisperTokenizerTimestampTests : IDisposable
         Assert.Equal(TimeSpan.FromSeconds(1.0), segments[1].Start);
         Assert.Equal(TimeSpan.FromSeconds(2.0), segments[1].End);
         Assert.Equal("This is a test", segments[1].Text);
+        Assert.Equal(4, segments[1].Words.Count);
     }
 }

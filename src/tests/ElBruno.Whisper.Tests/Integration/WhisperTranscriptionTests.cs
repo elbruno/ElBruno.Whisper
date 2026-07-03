@@ -192,4 +192,45 @@ public class WhisperTranscriptionTests
         Assert.Equal("en", result.DetectedLanguage);
         Assert.True(result.Duration > TimeSpan.Zero, "Duration should be positive");
     }
+
+    [Fact(Timeout = TimeoutMs)]
+    public async Task TranscribeAudio_WithTimestamps_ReturnsSegmentsAndWords()
+    {
+        var options = new WhisperOptions
+        {
+            Model = KnownWhisperModels.WhisperTinyEn,
+            EnsureModelDownloaded = true,
+            Language = "en",
+            EnableTimestamps = true
+        };
+
+        using var client = await WhisperClient.CreateAsync(options);
+
+        var audioPath = GetTestDataPath("test-audio-small.wav");
+        var result = await client.TranscribeAsync(audioPath);
+
+        Assert.NotNull(result.Segments);
+        Assert.NotNull(result.Words);
+        Assert.NotEmpty(result.Segments);
+        Assert.NotEmpty(result.Words);
+
+        var flattenedWords = result.Segments.SelectMany(static segment => segment.Words).ToList();
+
+        Assert.Equal(flattenedWords.Count, result.Words.Count);
+
+        foreach (var segment in result.Segments)
+        {
+            Assert.True(segment.End >= segment.Start, "Segment end should be at or after its start.");
+            Assert.NotEmpty(segment.Text);
+            Assert.NotEmpty(segment.Words);
+
+            foreach (var word in segment.Words)
+            {
+                Assert.True(word.Start >= segment.Start, "Word start should stay within the segment.");
+                Assert.True(word.End <= segment.End, "Word end should stay within the segment.");
+                Assert.True(word.End >= word.Start, "Word end should be at or after the word start.");
+                Assert.False(string.IsNullOrWhiteSpace(word.Text));
+            }
+        }
+    }
 }

@@ -22,6 +22,7 @@ Transcribe audio to text in .NET using OpenAI's Whisper model. Powered by ONNX R
 - 💉 **DI-friendly** — register with `AddWhisper()` in ASP.NET Core
 - 📊 **Progress reporting** — track model downloads with real-time callbacks
 - 🎯 **English-optimized models** — dedicated `.en` variants for best accuracy on English audio
+- ⏱️ **Timestamp-aware results** — opt into segment and word timings for subtitle and caption workflows
 
 ## Installation
 
@@ -136,6 +137,29 @@ Console.WriteLine(result.Text);                    // Transcribed text
 Console.WriteLine(result.DetectedLanguage);       // Detected language (for multilingual models)
 Console.WriteLine(result.Duration);               // Audio duration
 ```
+
+Enable timestamps to access both segment-level and word-level timing metadata:
+
+```csharp
+using var client = await WhisperClient.CreateAsync(new WhisperOptions
+{
+    EnableTimestamps = true
+});
+
+var result = await client.TranscribeAsync("audio.wav");
+
+foreach (var segment in result.Segments ?? [])
+{
+    Console.WriteLine($"[{segment.Start:mm\\:ss\\.ff} - {segment.End:mm\\:ss\\.ff}] {segment.Text}");
+
+    foreach (var word in segment.Words)
+    {
+        Console.WriteLine($"  {word.Start:mm\\:ss\\.ff} - {word.End:mm\\:ss\\.ff}: {word.Text}");
+    }
+}
+```
+
+Word timings are derived from the timestamped transcript spans produced by Whisper. If a model returns text without explicit spans, the library falls back to a single full-duration segment and derives word timings within that range.
 
 ## Troubleshooting
 

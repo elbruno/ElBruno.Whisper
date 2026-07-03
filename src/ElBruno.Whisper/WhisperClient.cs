@@ -149,13 +149,21 @@ public sealed class WhisperClient : IDisposable
     {
         if (_options.EnableTimestamps)
         {
-            var (text, segments) = _tokenizer.DecodeWithTimestamps(tokens);
+            var (text, decodedSegments) = _tokenizer.DecodeWithTimestamps(tokens);
+            var segments = decodedSegments.Count > 0 || string.IsNullOrWhiteSpace(text)
+                ? decodedSegments
+                : new List<TranscriptionSegment>
+                {
+                    _tokenizer.CreateTimedSegment(TimeSpan.Zero, audioDuration, text)
+                };
+
             return new TranscriptionResult
             {
                 Text = text,
                 DetectedLanguage = _options.Language,
                 Duration = audioDuration,
-                Segments = segments
+                Segments = segments,
+                Words = segments.SelectMany(static segment => segment.Words).ToArray()
             };
         }
 
@@ -284,6 +292,9 @@ public sealed class WhisperClient : IDisposable
         await downloader.DownloadFilesAsync(request, cancellationToken);
     }
 
+    /// <summary>
+    /// Release ONNX Runtime resources held by the client.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)
