@@ -21,6 +21,7 @@ Transcribe audio to text in .NET using OpenAI's Whisper model. Powered by ONNX R
 - 🌍 **Multilingual support** — transcribe 99+ languages with multilingual models
 - 💉 **DI-friendly** — register with `AddWhisper()` in ASP.NET Core
 - 🧵 **Concurrent transcription** — share one client with configurable queueing and pooled inference sessions
+- 🔄 **Incremental updates** — get rolling provisional and committed text through `GetStreamingTextAsync()`
 - 📊 **Progress reporting** — track model downloads with real-time callbacks
 - 🎯 **English-optimized models** — dedicated `.en` variants for best accuracy on English audio
 - ⏱️ **Timestamp-aware results** — opt into segment and word timings for subtitle and caption workflows
@@ -149,6 +150,41 @@ var results = await Task.WhenAll(
 ```
 
 If all inference slots are busy longer than `QueueTimeout`, `TranscribeAsync` throws `TimeoutException`. Cancelling the request also aborts queue waiting and the next safe decode checkpoint.
+
+## Incremental Transcription
+
+`WhisperClient.GetStreamingTextAsync()` runs Whisper over rolling windows and emits ordered updates with both stable and provisional text:
+
+```csharp
+using var client = await WhisperClient.CreateAsync();
+
+await foreach (var update in client.GetStreamingTextAsync(
+    "audio.wav",
+    new WhisperStreamingOptions
+    {
+        WindowSize = TimeSpan.FromSeconds(8),
+        StepSize = TimeSpan.FromSeconds(1),
+        ContextOverlap = TimeSpan.FromSeconds(2),
+        UseLocalAgreement = true,
+        AgreementIterations = 2
+    }))
+{
+    Console.WriteLine($"Committed:   {update.CommittedText}");
+    Console.WriteLine($"Provisional: {update.ProvisionalText}");
+
+    if (update.IsFinal)
+        Console.WriteLine("Final update received.");
+}
+```
+
+Each update exposes:
+
+- `CommittedText` — text that has stabilized across rolling windows
+- `ProvisionalText` — the newest hypothesis that may still change
+- `Text` — the combined transcript for the current update
+- `IsFinal` — true exactly once, after the final flush
+
+**Limitations:** Whisper is not a native streaming model. This API reads completed file or stream content, re-runs inference over overlapping windows, and uses local agreement to reduce duplicate committed text. Provisional text can still change between updates.
 
 ## Transcription Result
 

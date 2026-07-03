@@ -56,6 +56,52 @@ Console.WriteLine(result.Text);
 - `OperationCanceledException` — Transcription was cancelled
 - `TimeoutException` — The request waited longer than `WhisperOptions.Concurrency.QueueTimeout`
 
+#### GetStreamingTextAsync
+
+Emit rolling transcription updates for a file or stream.
+
+```csharp
+public IAsyncEnumerable<StreamingTranscriptionUpdate> GetStreamingTextAsync(
+    string audioFilePath,
+    WhisperStreamingOptions? streamingOptions = null,
+    CancellationToken cancellationToken = default);
+
+public IAsyncEnumerable<StreamingTranscriptionUpdate> GetStreamingTextAsync(
+    Stream audioStream,
+    WhisperStreamingOptions? streamingOptions = null,
+    CancellationToken cancellationToken = default);
+```
+
+**Parameters:**
+- `audioFilePath` / `audioStream` — Completed audio content to analyze with rolling windows
+- `streamingOptions` (`WhisperStreamingOptions`, optional) — Window sizing and local-agreement behavior
+- `cancellationToken` (`CancellationToken`, optional) — Stops future updates and prevents the final flush
+
+**Returns:** `IAsyncEnumerable<StreamingTranscriptionUpdate>` with ordered provisional and final updates
+
+**Example:**
+```csharp
+await foreach (var update in client.GetStreamingTextAsync(
+                   "audio.wav",
+                   new WhisperStreamingOptions
+                   {
+                       WindowSize = TimeSpan.FromSeconds(8),
+                       StepSize = TimeSpan.FromSeconds(1),
+                       ContextOverlap = TimeSpan.FromSeconds(2),
+                       UseLocalAgreement = true,
+                       AgreementIterations = 2
+                   }))
+{
+    Console.WriteLine($"Committed: {update.CommittedText}");
+    Console.WriteLine($"Provisional: {update.ProvisionalText}");
+}
+```
+
+**Notes:**
+- `IsFinal` is `true` exactly once on the last successful update.
+- `CommittedText` is de-duplicated across overlapping windows.
+- `ProvisionalText` may change between updates because Whisper is not a native streaming model.
+
 #### Dispose
 
 Release model and ONNX Runtime resources.
@@ -145,6 +191,64 @@ var options = new WhisperOptions
 ```
 
 `MaximumConcurrentRequests` controls how many transcriptions may run in parallel. `QueueTimeout` bounds how long a caller may wait for a free inference slot. `EnableSessionPooling` reuses ONNX sessions between requests to avoid paying the full session-creation cost every time.
+
+---
+
+## WhisperStreamingOptions
+
+Controls rolling-window update behavior for `GetStreamingTextAsync()`.
+
+```csharp
+public sealed class WhisperStreamingOptions
+{
+    public TimeSpan WindowSize { get; set; } = TimeSpan.FromSeconds(8);
+    public TimeSpan StepSize { get; set; } = TimeSpan.FromSeconds(1);
+    public TimeSpan ContextOverlap { get; set; } = TimeSpan.FromSeconds(2);
+    public bool UseLocalAgreement { get; set; } = true;
+    public int AgreementIterations { get; set; } = 2;
+}
+```
+
+### Behavior
+
+- `WindowSize` controls how much new audio each rolling pass analyzes.
+- `StepSize` controls how often a new update can be emitted.
+- `ContextOverlap` keeps a short lookback window so adjacent passes share context.
+- `UseLocalAgreement` delays commits until neighboring hypotheses overlap.
+- `AgreementIterations` controls how many successive hypotheses are required before the oldest one is committed.
+
+**Validation rules:**
+- `WindowSize` > 0
+- `StepSize` > 0
+- `ContextOverlap` >= 0 and `< WindowSize`
+- `AgreementIterations` >= 1
+
+---
+
+## StreamingTranscriptionUpdate
+
+Represents one incremental update from `GetStreamingTextAsync()`.
+
+```csharp
+public sealed record StreamingTranscriptionUpdate
+{
+    public string Text { get; init; }
+    public string CommittedText { get; init; }
+    public string ProvisionalText { get; init; }
+    public TimeSpan WindowStart { get; init; }
+    public TimeSpan WindowEnd { get; init; }
+    public TimeSpan TotalDuration { get; init; }
+    public bool IsFinal { get; init; }
+}
+```
+
+### Semantics
+
+- `Text` is `CommittedText` plus the current `ProvisionalText`
+- `CommittedText` contains stable text only
+- `ProvisionalText` contains the latest revisable tail
+- `WindowStart` / `WindowEnd` describe the rolling window that produced the update
+- `IsFinal` is `true` only for the terminal flush
 
 ---
 

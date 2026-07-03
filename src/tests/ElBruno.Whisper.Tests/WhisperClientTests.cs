@@ -90,4 +90,14 @@ public class WhisperClientTests
         Assert.NotNull(method);
         Assert.True(method.IsStatic);
     }
+
+    [Fact]
+    public void WhisperClient_HasGetStreamingTextAsyncMethods()
+    {
+        var methods = typeof(WhisperClient).GetMethods()
+            .Where(m => m.Name == "GetStreamingTextAsync")
+            .ToArray();
+
+        Assert.Equal(2, methods.Length);
+    }
 }
