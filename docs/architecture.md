@@ -68,6 +68,38 @@ Input Audio File
 5. **Decoder** — ONNX Whisper decoder auto-regressively generates token IDs
 6. **Tokenizer** — converts token IDs back to text using BPE tokenizer
 
+## Rolling Incremental Transcription
+
+`GetStreamingTextAsync()` layers a rolling-window coordinator on top of the existing full-window Whisper inference path:
+
+```text
+Normalized audio
+  ├─ rolling window slice
+  ├─ mel spectrogram
+  ├─ Whisper inference
+  ├─ text hypothesis
+  ├─ local agreement / overlap merge
+  └─> StreamingTranscriptionUpdate
+       ├─ CommittedText
+       ├─ ProvisionalText
+       └─ IsFinal
+```
+
+### How it works
+
+1. Audio is normalized once to 16 kHz mono.
+2. The client reuses overlapping windows of that normalized audio.
+3. Each window is transcribed through the same backend as `TranscribeAsync()`.
+4. Neighboring hypotheses are merged with suffix/prefix overlap checks.
+5. Stable text moves into `CommittedText`; the newest revisable tail stays in `ProvisionalText`.
+6. The final update flushes the remaining provisional text exactly once.
+
+### Limitations
+
+- Whisper is not a transducer-style streaming model, so updates are approximate.
+- Provisional text may be revised by later windows.
+- The API operates on completed file or stream content rather than an endless live microphone feed.
+
 ## Model Download Flow
 
 ```

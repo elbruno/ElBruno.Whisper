@@ -171,6 +171,31 @@ var results = await Task.WhenAll(
 
 If all inference slots stay busy longer than `QueueTimeout`, the waiting request throws `TimeoutException`. Cancelling the request also stops queue waiting and is observed during decoding at the next safe checkpoint.
 
+## Incremental Transcription
+
+Use `GetStreamingTextAsync()` when you want rolling updates while processing an already available audio file or stream:
+
+```csharp
+using var client = await WhisperClient.CreateAsync();
+
+await foreach (var update in client.GetStreamingTextAsync(
+                   "audio.wav",
+                   new WhisperStreamingOptions
+                   {
+                       WindowSize = TimeSpan.FromSeconds(8),
+                       StepSize = TimeSpan.FromSeconds(1),
+                       ContextOverlap = TimeSpan.FromSeconds(2)
+                   }))
+{
+    Console.WriteLine($"Committed: {update.CommittedText}");
+    Console.WriteLine($"Provisional: {update.ProvisionalText}");
+}
+```
+
+`CommittedText` only includes text that has stabilized across overlapping windows. `ProvisionalText` is the revisable tail. `IsFinal` becomes `true` exactly once on the last update.
+
+> **Important:** Whisper is not a true streaming model. The library simulates incremental output by re-running inference over overlapping windows, so provisional text can change between updates.
+
 ## Transcription
 
 ### Basic Transcription

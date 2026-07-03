@@ -5,7 +5,7 @@ namespace ElBruno.Whisper.Audio;
 /// </summary>
 internal sealed class AudioProcessor
 {
-    private const int TargetSampleRate = 16000;
+    internal const int TargetSampleRate = 16000;
     private const int MelBins = 80;
     private const int FftSize = 400; // 25ms at 16kHz
     private const int HopLength = 160; // 10ms at 16kHz
@@ -29,8 +29,8 @@ internal sealed class AudioProcessor
     /// </summary>
     public (float[] MelSpectrogram, TimeSpan AudioDuration) ProcessAudioFile(string path)
     {
-        var wav = WavReader.FromFile(path);
-        return ProcessAudio(wav);
+        var processedAudio = ReadAudioFile(path);
+        return ProcessNormalizedSamples(processedAudio.Samples, processedAudio.Duration);
     }
 
     /// <summary>
@@ -38,30 +38,46 @@ internal sealed class AudioProcessor
     /// </summary>
     public (float[] MelSpectrogram, TimeSpan AudioDuration) ProcessAudioStream(Stream stream)
     {
-        var wav = WavReader.FromStream(stream);
-        return ProcessAudio(wav);
+        var processedAudio = ReadAudioStream(stream);
+        return ProcessNormalizedSamples(processedAudio.Samples, processedAudio.Duration);
     }
 
-    private (float[] MelSpectrogram, TimeSpan AudioDuration) ProcessAudio(WavReader wav)
+    public ProcessedAudio ReadAudioFile(string path)
     {
-        // Convert to mono and resample to 16kHz
-        wav.ConvertToMono();
-        wav.Resample(TargetSampleRate);
+        var wav = WavReader.FromFile(path);
+        return ReadAudio(wav);
+    }
 
-        // Compute audio duration before padding
-        var audioDuration = TimeSpan.FromSeconds((double)wav.Samples.Length / TargetSampleRate);
+    public ProcessedAudio ReadAudioStream(Stream stream)
+    {
+        var wav = WavReader.FromStream(stream);
+        return ReadAudio(wav);
+    }
 
-        // Pad or trim audio to exactly 30 seconds (480,000 samples)
-        // This matches OpenAI Whisper's behavior and ensures STFT produces exactly 3000 frames
-        var paddedAudio = PadOrTrimAudio(wav.Samples, MaxSamples);
+    public (float[] MelSpectrogram, TimeSpan AudioDuration) ProcessNormalizedSamples(float[] samples)
+    {
+        var audioDuration = TimeSpan.FromSeconds((double)samples.Length / TargetSampleRate);
+        return ProcessNormalizedSamples(samples, audioDuration);
+    }
 
-        // Compute log-mel spectrogram
+    public (float[] MelSpectrogram, TimeSpan AudioDuration) ProcessNormalizedSamples(
+        float[] samples,
+        TimeSpan audioDuration)
+    {
+        var paddedAudio = PadOrTrimAudio(samples, MaxSamples);
         var melSpec = _melProcessor.ComputeMelSpectrogram(paddedAudio);
-
-        // Flatten [80, nFrames] to [1, 80, 3000] with padding if needed
         var result = PadOrTruncate(melSpec, MaxFrames);
 
         return (result, audioDuration);
+    }
+
+    private static ProcessedAudio ReadAudio(WavReader wav)
+    {
+        wav.ConvertToMono();
+        wav.Resample(TargetSampleRate);
+
+        var audioDuration = TimeSpan.FromSeconds((double)wav.Samples.Length / TargetSampleRate);
+        return new ProcessedAudio(wav.Samples, audioDuration);
     }
 
     private static float[] PadOrTrimAudio(float[] samples, int targetLength)

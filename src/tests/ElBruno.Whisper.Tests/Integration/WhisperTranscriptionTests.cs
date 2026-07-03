@@ -288,4 +288,37 @@ public class WhisperTranscriptionTests
 
         Assert.All(results, static result => Assert.False(string.IsNullOrWhiteSpace(result.Text)));
     }
+
+    [Fact(Timeout = TimeoutMs)]
+    public async Task GetStreamingTextAsync_EmitsProvisionalAndFinalUpdates()
+    {
+        var options = new WhisperOptions
+        {
+            Model = KnownWhisperModels.WhisperTinyEn,
+            EnsureModelDownloaded = true,
+            Language = "en"
+        };
+
+        using var client = await WhisperClient.CreateAsync(options);
+
+        var audioPath = GetTestDataPath("test-audio-medium.wav");
+        var updates = new List<StreamingTranscriptionUpdate>();
+
+        await foreach (var update in client.GetStreamingTextAsync(audioPath, new WhisperStreamingOptions
+                       {
+                           WindowSize = TimeSpan.FromSeconds(2),
+                           StepSize = TimeSpan.FromSeconds(1),
+                           ContextOverlap = TimeSpan.FromMilliseconds(500)
+                       }))
+        {
+            updates.Add(update);
+        }
+
+        Assert.NotEmpty(updates);
+        Assert.True(updates.Count > 1, "Expected at least one rolling update before the final update.");
+        Assert.Single(updates, static update => update.IsFinal);
+        Assert.True(updates[^1].IsFinal, "The final update should be the last update emitted.");
+        Assert.False(string.IsNullOrWhiteSpace(updates[^1].Text));
+        Assert.Contains(updates, static update => !update.IsFinal && !string.IsNullOrWhiteSpace(update.ProvisionalText));
+    }
 }

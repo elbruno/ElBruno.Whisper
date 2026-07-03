@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using ElBruno.HuggingFace;
 using ElBruno.Whisper.Audio;
 using ElBruno.Whisper.Inference;
@@ -11,19 +12,17 @@ namespace ElBruno.Whisper;
 /// </summary>
 public sealed class WhisperClient : IDisposable
 {
-    private readonly WhisperOptions _options;
     private readonly AudioProcessor _audioProcessor;
-    private readonly WhisperModelRuntime _runtime;
+    private readonly IWhisperTranscriptionBackend _transcriptionBackend;
     private bool _disposed;
 
-    private WhisperClient(
+    internal WhisperClient(
         WhisperOptions options,
         AudioProcessor audioProcessor,
-        WhisperModelRuntime runtime)
+        IWhisperTranscriptionBackend transcriptionBackend)
     {
-        _options = options;
         _audioProcessor = audioProcessor;
-        _runtime = runtime;
+        _transcriptionBackend = transcriptionBackend;
     }
 
     /// <summary>
@@ -38,8 +37,9 @@ public sealed class WhisperClient : IDisposable
         var audioProcessor = new AudioProcessor();
         var runtime = await WhisperModelRuntime.CreateAsync(options, progress, cancellationToken)
             .ConfigureAwait(false);
+        var transcriptionBackend = new WhisperTranscriptionBackend(options, runtime);
 
-        return new WhisperClient(options, audioProcessor, runtime);
+        return new WhisperClient(options, audioProcessor, transcriptionBackend);
     }
 
     /// <summary>
@@ -69,83 +69,37 @@ public sealed class WhisperClient : IDisposable
             cancellationToken);
     }
 
-    private TranscriptionResult BuildResult(int[] tokens, TimeSpan audioDuration)
+    /// <summary>
+    /// Produce rolling transcription updates for an audio file.
+    /// </summary>
+    public IAsyncEnumerable<StreamingTranscriptionUpdate> GetStreamingTextAsync(
+        string audioFilePath,
+        WhisperStreamingOptions? streamingOptions = null,
+        CancellationToken cancellationToken = default)
     {
-        if (_options.EnableTimestamps)
+        if (!File.Exists(audioFilePath))
         {
-            var (text, decodedSegments) = _runtime.Tokenizer.DecodeWithTimestamps(tokens);
-            var segments = decodedSegments.Count > 0 || string.IsNullOrWhiteSpace(text)
-                ? decodedSegments
-                : new List<TranscriptionSegment>
-                {
-                    _runtime.Tokenizer.CreateTimedSegment(TimeSpan.Zero, audioDuration, text)
-                };
-
-            return new TranscriptionResult
-            {
-                Text = text,
-                DetectedLanguage = _options.Language,
-                Duration = audioDuration,
-                Segments = segments,
-                Words = segments.SelectMany(static segment => segment.Words).ToArray()
-            };
+            throw new FileNotFoundException("Audio file not found", audioFilePath);
         }
 
-        return new TranscriptionResult
-        {
-            Text = _runtime.Tokenizer.Decode(tokens),
-            DetectedLanguage = _options.Language,
-            Duration = audioDuration
-        };
-    }
-
-    private int[] GetInitialTokens()
-    {
-        var (sot, transcribe, translate, noTimestamps, language) = 
-            _runtime.Tokenizer.GetSpecialTokenIds(_options.Language);
-
-        var tokens = new List<int> { sot };
-
-        // Add language and task tokens only when language is specified.
-        // For English-only (.en) models without explicit language, the Whisper
-        // reference uses just [SOT, noTimestamps] — no language or task tokens.
-        if (language.HasValue)
-        {
-            tokens.Add(language.Value);
-            tokens.Add(_options.Translate ? translate : transcribe);
-        }
-
-        // Skip no-timestamps token when timestamps are enabled so the model
-        // generates timestamp tokens in its output sequence.
-        if (!_options.EnableTimestamps)
-        {
-            tokens.Add(noTimestamps);
-        }
-
-        return tokens.ToArray();
+        return GetStreamingTextCoreAsync(
+            _audioProcessor.ReadAudioFile(audioFilePath),
+            streamingOptions ?? new WhisperStreamingOptions(),
+            cancellationToken);
     }
 
     /// <summary>
-    /// Builds the list of token IDs to suppress during decoding.
-    /// Combines the model's config suppress_tokens with timestamp suppression.
-    /// EOT is NOT suppressed here (it's the stop condition).
+    /// Produce rolling transcription updates for an audio stream.
     /// </summary>
-    private int[] GetSuppressTokens()
+    public IAsyncEnumerable<StreamingTranscriptionUpdate> GetStreamingTextAsync(
+        Stream audioStream,
+        WhisperStreamingOptions? streamingOptions = null,
+        CancellationToken cancellationToken = default)
     {
-        var suppress = new HashSet<int>(_runtime.ConfigSuppressTokens);
-
-        // Only suppress timestamp tokens when timestamps are disabled
-        if (!_options.EnableTimestamps)
-        {
-            var (_, _, _, noTimestamps, _) = _runtime.Tokenizer.GetSpecialTokenIds();
-            const int vocabSize = 51865;
-            for (int t = noTimestamps + 1; t < vocabSize; t++)
-            {
-                suppress.Add(t);
-            }
-        }
-
-        return suppress.ToArray();
+        return GetStreamingTextCoreAsync(
+            _audioProcessor.ReadAudioStream(audioStream),
+            streamingOptions ?? new WhisperStreamingOptions(),
+            cancellationToken);
     }
 
     /// <summary>
@@ -155,7 +109,7 @@ public sealed class WhisperClient : IDisposable
     {
         if (!_disposed)
         {
-            _runtime.Dispose();
+            _transcriptionBackend.Dispose();
             _disposed = true;
         }
     }
@@ -173,25 +127,295 @@ public sealed class WhisperClient : IDisposable
             var (melSpec, audioDuration) = audioProcessor();
             cancellationToken.ThrowIfCancellationRequested();
 
-            var initialTokens = GetInitialTokens();
-            var suppressTokens = GetSuppressTokens();
-            var tokens = await _runtime.RunInferenceAsync(
-                    melSpec,
-                    initialTokens,
-                    _options.MaxTokens,
-                    _runtime.Tokenizer.EotToken,
-                    suppressTokens,
-                    _runtime.BeginSuppressTokens,
-                    cancellationToken)
+            return await _transcriptionBackend
+                .TranscribeAsync(melSpec, audioDuration, cancellationToken)
+                .ConfigureAwait(false);
+        }, cancellationToken);
+    }
+
+    private async IAsyncEnumerable<StreamingTranscriptionUpdate> GetStreamingTextCoreAsync(
+        ProcessedAudio processedAudio,
+        WhisperStreamingOptions streamingOptions,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        streamingOptions.Validate();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var state = new StreamingTranscriptState(
+            processedAudio.Duration,
+            streamingOptions.GetRequiredHypothesisCount(),
+            streamingOptions.UseLocalAgreement);
+
+        foreach (var window in GetRollingWindows(processedAudio.Samples.Length, streamingOptions))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var windowSamples = SliceSamples(processedAudio.Samples, window.StartSample, window.EndSample);
+            var (melSpectrogram, audioDuration) = _audioProcessor.ProcessNormalizedSamples(windowSamples);
+            var result = await _transcriptionBackend
+                .TranscribeAsync(melSpectrogram, audioDuration, cancellationToken)
                 .ConfigureAwait(false);
 
-            cancellationToken.ThrowIfCancellationRequested();
-            return BuildResult(tokens, audioDuration);
-        }, cancellationToken);
+            var update = state.AddHypothesis(result.Text, window.Start, window.End);
+            if (update is not null)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return update;
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return state.BuildFinalUpdate();
+    }
+
+    private static IReadOnlyList<RollingWindow> GetRollingWindows(
+        int totalSamples,
+        WhisperStreamingOptions streamingOptions)
+    {
+        if (totalSamples <= 0)
+        {
+            return [];
+        }
+
+        var windows = new List<RollingWindow>();
+        var windowSamples = ToSampleCount(streamingOptions.WindowSize);
+        var stepSamples = ToSampleCount(streamingOptions.StepSize);
+        var overlapSamples = ToSampleCount(streamingOptions.ContextOverlap);
+
+        for (int cursorSample = 0; cursorSample < totalSamples; cursorSample += stepSamples)
+        {
+            var startSample = Math.Max(0, cursorSample - overlapSamples);
+            var endSample = Math.Min(totalSamples, cursorSample + windowSamples);
+            windows.Add(new RollingWindow(startSample, endSample));
+
+            if (endSample >= totalSamples)
+            {
+                break;
+            }
+        }
+
+        return windows;
+    }
+
+    private static int ToSampleCount(TimeSpan duration)
+    {
+        return Math.Max(1, (int)Math.Ceiling(duration.TotalSeconds * AudioProcessor.TargetSampleRate));
+    }
+
+    private static float[] SliceSamples(float[] source, int startSample, int endSample)
+    {
+        var length = Math.Max(0, endSample - startSample);
+        if (length == 0)
+        {
+            return [];
+        }
+
+        var result = new float[length];
+        Array.Copy(source, startSample, result, 0, length);
+        return result;
     }
 
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, typeof(WhisperClient));
+    }
+
+    private readonly record struct RollingWindow(int StartSample, int EndSample)
+    {
+        public TimeSpan Start => TimeSpan.FromSeconds((double)StartSample / AudioProcessor.TargetSampleRate);
+
+        public TimeSpan End => TimeSpan.FromSeconds((double)EndSample / AudioProcessor.TargetSampleRate);
+    }
+
+    private sealed class StreamingTranscriptState
+    {
+        private readonly List<string> _committedWords = [];
+        private readonly List<IReadOnlyList<string>> _hypothesisQueue = [];
+        private readonly TimeSpan _totalDuration;
+        private readonly int _requiredHypothesisCount;
+        private readonly bool _useLocalAgreement;
+        private string _lastCommittedText = string.Empty;
+        private string _lastProvisionalText = string.Empty;
+
+        public StreamingTranscriptState(
+            TimeSpan totalDuration,
+            int requiredHypothesisCount,
+            bool useLocalAgreement)
+        {
+            _totalDuration = totalDuration;
+            _requiredHypothesisCount = requiredHypothesisCount;
+            _useLocalAgreement = useLocalAgreement;
+        }
+
+        public StreamingTranscriptionUpdate? AddHypothesis(string hypothesisText, TimeSpan windowStart, TimeSpan windowEnd)
+        {
+            _hypothesisQueue.Add(SplitWords(hypothesisText));
+            CommitStableHypotheses();
+
+            var committedText = JoinWords(_committedWords);
+            var provisionalText = JoinWords(MergeQueuedWords(_hypothesisQueue));
+
+            if (committedText == _lastCommittedText && provisionalText == _lastProvisionalText)
+            {
+                return null;
+            }
+
+            _lastCommittedText = committedText;
+            _lastProvisionalText = provisionalText;
+
+            return CreateUpdate(committedText, provisionalText, windowStart, windowEnd, isFinal: false);
+        }
+
+        public StreamingTranscriptionUpdate BuildFinalUpdate()
+        {
+            var remainingWords = MergeQueuedWords(_hypothesisQueue);
+            AppendWithOverlap(_committedWords, remainingWords);
+            _hypothesisQueue.Clear();
+
+            var committedText = JoinWords(_committedWords);
+            return CreateUpdate(
+                committedText,
+                string.Empty,
+                TimeSpan.Zero,
+                _totalDuration,
+                isFinal: true);
+        }
+
+        private void CommitStableHypotheses()
+        {
+            while (_hypothesisQueue.Count >= _requiredHypothesisCount)
+            {
+                if (_useLocalAgreement && !HasAgreement(_hypothesisQueue, _requiredHypothesisCount))
+                {
+                    break;
+                }
+
+                var oldestHypothesis = _hypothesisQueue[0];
+                AppendWithOverlap(_committedWords, oldestHypothesis);
+                _hypothesisQueue.RemoveAt(0);
+
+                if (_hypothesisQueue.Count == 0)
+                {
+                    continue;
+                }
+
+                var overlap = FindSuffixPrefixOverlap(oldestHypothesis, _hypothesisQueue[0]);
+                if (overlap <= 0)
+                {
+                    continue;
+                }
+
+                var trimmed = _hypothesisQueue[0].Skip(overlap).ToArray();
+                _hypothesisQueue[0] = trimmed;
+
+                if (trimmed.Length > 0)
+                {
+                    continue;
+                }
+
+                _hypothesisQueue.RemoveAt(0);
+            }
+        }
+
+        private static bool HasAgreement(IReadOnlyList<IReadOnlyList<string>> hypotheses, int requiredHypothesisCount)
+        {
+            for (int index = 0; index < requiredHypothesisCount - 1; index++)
+            {
+                if (FindSuffixPrefixOverlap(hypotheses[index], hypotheses[index + 1]) <= 0)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private StreamingTranscriptionUpdate CreateUpdate(
+            string committedText,
+            string provisionalText,
+            TimeSpan windowStart,
+            TimeSpan windowEnd,
+            bool isFinal)
+        {
+            var combinedText = string.IsNullOrWhiteSpace(provisionalText)
+                ? committedText
+                : string.IsNullOrWhiteSpace(committedText)
+                    ? provisionalText
+                    : $"{committedText} {provisionalText}";
+
+            return new StreamingTranscriptionUpdate
+            {
+                Text = combinedText,
+                CommittedText = committedText,
+                ProvisionalText = provisionalText,
+                WindowStart = windowStart,
+                WindowEnd = windowEnd,
+                TotalDuration = _totalDuration,
+                IsFinal = isFinal
+            };
+        }
+
+        private static IReadOnlyList<string> MergeQueuedWords(IEnumerable<IReadOnlyList<string>> hypotheses)
+        {
+            var merged = new List<string>();
+            foreach (var hypothesis in hypotheses)
+            {
+                AppendWithOverlap(merged, hypothesis);
+            }
+
+            return merged;
+        }
+
+        private static IReadOnlyList<string> SplitWords(string value)
+        {
+            return value.Split([' ', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+
+        private static string JoinWords(IEnumerable<string> words)
+        {
+            return string.Join(" ", words);
+        }
+
+        private static void AppendWithOverlap(List<string> destination, IReadOnlyList<string> source)
+        {
+            if (source.Count == 0)
+            {
+                return;
+            }
+
+            var overlap = FindSuffixPrefixOverlap(destination, source);
+            for (int index = overlap; index < source.Count; index++)
+            {
+                destination.Add(source[index]);
+            }
+        }
+
+        private static int FindSuffixPrefixOverlap(IReadOnlyList<string> left, IReadOnlyList<string> right)
+        {
+            var maxOverlap = Math.Min(left.Count, right.Count);
+            for (int length = maxOverlap; length > 0; length--)
+            {
+                var matches = true;
+                for (int offset = 0; offset < length; offset++)
+                {
+                    if (!string.Equals(
+                            left[left.Count - length + offset],
+                            right[offset],
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        matches = false;
+                        break;
+                    }
+                }
+
+                if (matches)
+                {
+                    return length;
+                }
+            }
+
+            return 0;
+        }
     }
 }
