@@ -1,4 +1,6 @@
 using Xunit;
+#pragma warning disable MEAI001
+using Microsoft.Extensions.AI;
 
 namespace ElBruno.Whisper.Tests.Integration;
 
@@ -168,6 +170,33 @@ public class WhisperTranscriptionTests
         var audioPath = GetTestDataPath("test-audio-medium.wav");
         using var stream = File.OpenRead(audioPath);
         var result = await client.TranscribeAsync(stream);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result.Text);
+        Assert.NotEmpty(result.Text);
+    }
+
+    [Fact(Timeout = TimeoutMs)]
+    public async Task SpeechToTextAdapter_SmallAudio_ReturnsNonEmptyText()
+    {
+        var options = new WhisperOptions
+        {
+            Model = KnownWhisperModels.WhisperTinyEn,
+            EnsureModelDownloaded = true,
+            Language = "en"
+        };
+
+        using var whisperClient = await WhisperClient.CreateAsync(options);
+        using ISpeechToTextClient client = new WhisperSpeechToTextClient(whisperClient);
+
+        var audioPath = GetTestDataPath("test-audio-small.wav");
+        using var stream = File.OpenRead(audioPath);
+        var result = await client.GetTextAsync(
+            stream,
+            new SpeechToTextOptions
+            {
+                SpeechLanguage = "en"
+            });
 
         Assert.NotNull(result);
         Assert.NotNull(result.Text);

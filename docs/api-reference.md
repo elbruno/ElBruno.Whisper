@@ -154,6 +154,92 @@ using var client = await WhisperClient.CreateAsync();
 
 ---
 
+## WhisperSpeechToTextClient
+
+Adapter that implements `Microsoft.Extensions.AI.ISpeechToTextClient` over `WhisperClient`.
+
+```csharp
+public sealed class WhisperSpeechToTextClient : ISpeechToTextClient
+```
+
+### Constructors
+
+```csharp
+public WhisperSpeechToTextClient(WhisperClient inner);
+```
+
+### Methods
+
+#### GetTextAsync
+
+```csharp
+public Task<SpeechToTextResponse> GetTextAsync(
+    Stream audioSpeechStream,
+    SpeechToTextOptions? options = null,
+    CancellationToken cancellationToken = default);
+```
+
+**Behavior:**
+- Keeps the caller-owned stream open
+- Supports cancellation
+- Reuses the wrapped `WhisperClient` when request options match the default client configuration
+- Creates a request-scoped Whisper client when `SpeechToTextOptions` overrides the model or decoding settings
+
+**Mapped `SpeechToTextOptions`:**
+- `ModelId` → `WhisperOptions.Model`
+- `SpeechLanguage` → `WhisperOptions.Language`
+- `TextLanguage = "en"` → `WhisperOptions.Translate = true`
+- `AdditionalProperties["elbruno.whisper.enable_timestamps"]` → `WhisperOptions.EnableTimestamps`
+- `AdditionalProperties["elbruno.whisper.max_tokens"]` → `WhisperOptions.MaxTokens`
+- `AdditionalProperties["elbruno.whisper.temperature"]` → `WhisperOptions.Temperature`
+
+**Raw PCM additional properties:**
+- `elbruno.whisper.media_type`
+- `elbruno.whisper.channels`
+- `elbruno.whisper.sample_format`
+- `elbruno.whisper.sample_rate`
+
+**Response metadata keys:**
+- `elbruno.whisper.detected_language`
+- `elbruno.whisper.audio_duration_ms`
+- `elbruno.whisper.segments`
+- `elbruno.whisper.words`
+- `elbruno.whisper.model_id`
+- `elbruno.whisper.execution_provider`
+
+#### GetStreamingTextAsync
+
+```csharp
+public IAsyncEnumerable<SpeechToTextResponseUpdate> GetStreamingTextAsync(
+    Stream audioSpeechStream,
+    SpeechToTextOptions? options = null,
+    CancellationToken cancellationToken = default);
+```
+
+Returns a single final `SpeechToTextResponseUpdate` backed by the non-streaming Whisper transcription result.
+
+#### GetService
+
+```csharp
+public object? GetService(Type serviceType, object? serviceKey = null);
+```
+
+Supports:
+- `ISpeechToTextClient`
+- `WhisperSpeechToTextClient`
+- `SpeechToTextClientMetadata`
+- `WhisperClient` when the adapter wraps a concrete shared client
+- `WhisperOptions`
+
+### Metadata
+
+`GetService(typeof(SpeechToTextClientMetadata))` returns metadata with:
+- Provider name: `elbruno.whisper`
+- Provider URI: `https://github.com/elbruno/ElBruno.Whisper`
+- Default model ID: the configured Whisper model
+
+---
+
 ## WhisperOptions
 
 Configuration for WhisperClient.
@@ -199,6 +285,22 @@ var options = new WhisperOptions
 };
 using var client = await WhisperClient.CreateAsync(options);
 ```
+
+---
+
+## Dependency Injection
+
+```csharp
+builder.Services.AddWhisper(options =>
+{
+    options.Model = KnownWhisperModels.WhisperTinyEn;
+});
+```
+
+`AddWhisper()` registers:
+- `WhisperOptions`
+- `WhisperSpeechToTextClient`
+- `ISpeechToTextClient`
 
 ---
 

@@ -20,6 +20,7 @@ Transcribe audio to text in .NET using OpenAI's Whisper model. Powered by ONNX R
 - 🚀 **Zero friction** — works out of the box with sensible defaults (tiny.en)
 - 🌍 **Multilingual support** — transcribe 99+ languages with multilingual models
 - 💉 **DI-friendly** — register with `AddWhisper()` in ASP.NET Core
+- 🧩 **Microsoft.Extensions.AI ready** — resolve `ISpeechToTextClient` for standard speech-to-text integration
 - 🧵 **Concurrent transcription** — share one client with configurable queueing and pooled inference sessions
 - 🔄 **Incremental updates** — get rolling provisional and committed text through `GetStreamingTextAsync()`
 - 📼 **Raw audio inputs** — transcribe WAV streams, PCM16 byte streams, and Float32 memory without temporary files
@@ -127,7 +128,50 @@ builder.Services.AddWhisper(options =>
 });
 ```
 
-`AddWhisper()` registers `WhisperOptions`. Create and share a `WhisperClient` yourself where you control startup and disposal.
+`AddWhisper()` registers `WhisperOptions`, `WhisperSpeechToTextClient`, and `ISpeechToTextClient`. Create and share a `WhisperClient` yourself when you want direct control over startup and disposal.
+
+## Microsoft.Extensions.AI
+
+Use the adapter when you want the standard `ISpeechToTextClient` contract:
+
+```csharp
+using ElBruno.Whisper;
+using Microsoft.Extensions.AI;
+
+builder.Services.AddWhisper(options =>
+{
+    options.Model = KnownWhisperModels.WhisperTinyEn;
+    options.Language = "en";
+});
+
+var speechToText = builder.Services
+    .BuildServiceProvider()
+    .GetRequiredService<ISpeechToTextClient>();
+
+await using var audioStream = File.OpenRead("audio.wav");
+var response = await speechToText.GetTextAsync(
+    audioStream,
+    new SpeechToTextOptions
+    {
+        SpeechLanguage = "en",
+        AdditionalProperties = new()
+        {
+            ["elbruno.whisper.enable_timestamps"] = true
+        }
+    });
+
+Console.WriteLine(response.Text);
+Console.WriteLine(response.AdditionalProperties?["elbruno.whisper.detected_language"]);
+```
+
+The adapter keeps caller-owned streams open, supports cancellation, exposes `SpeechToTextClientMetadata`, and returns these response metadata keys through `AdditionalProperties`:
+
+- `elbruno.whisper.detected_language`
+- `elbruno.whisper.audio_duration_ms`
+- `elbruno.whisper.segments`
+- `elbruno.whisper.words`
+- `elbruno.whisper.model_id`
+- `elbruno.whisper.execution_provider`
 
 ## Thread Safety and Concurrency
 

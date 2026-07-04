@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+#pragma warning disable MEAI001
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace ElBruno.Whisper.Tests;
@@ -99,6 +101,20 @@ public class WhisperServiceExtensionsTests
         var options2 = serviceProvider.GetRequiredService<WhisperOptions>();
         
         Assert.Same(options1, options2);
+    }
+
+    [Fact]
+    public void AddWhisper_RegistersSpeechToTextServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddWhisper();
+
+        var serviceProvider = services.BuildServiceProvider();
+        var adapter = serviceProvider.GetRequiredService<WhisperSpeechToTextClient>();
+        var speechToTextClient = serviceProvider.GetRequiredService<ISpeechToTextClient>();
+
+        Assert.Same(adapter, speechToTextClient);
     }
 
     [Fact]

@@ -171,6 +171,40 @@ var results = await Task.WhenAll(
 
 If all inference slots stay busy longer than `QueueTimeout`, the waiting request throws `TimeoutException`. Cancelling the request also stops queue waiting and is observed during decoding at the next safe checkpoint.
 
+## Microsoft.Extensions.AI Integration
+
+If your app already composes AI providers through `Microsoft.Extensions.AI`, register the adapter and resolve `ISpeechToTextClient`:
+
+```csharp
+using ElBruno.Whisper;
+using Microsoft.Extensions.AI;
+
+builder.Services.AddWhisper(options =>
+{
+    options.Model = KnownWhisperModels.WhisperTinyEn;
+    options.Language = "en";
+});
+
+var services = builder.Services.BuildServiceProvider();
+var speechToTextClient = services.GetRequiredService<ISpeechToTextClient>();
+
+await using var stream = File.OpenRead("audio.wav");
+var response = await speechToTextClient.GetTextAsync(
+    stream,
+    new SpeechToTextOptions
+    {
+        SpeechLanguage = "en",
+        AdditionalProperties = new()
+        {
+            ["elbruno.whisper.enable_timestamps"] = true
+        }
+    });
+
+Console.WriteLine(response.Text);
+```
+
+The adapter returns Whisper metadata through `SpeechToTextResponse.AdditionalProperties` and keeps the input stream open for the caller.
+
 ## Incremental Transcription
 
 Use `GetStreamingTextAsync()` when you want rolling updates while processing an already available audio file or stream:

@@ -12,6 +12,7 @@ namespace ElBruno.Whisper;
 /// </summary>
 public sealed class WhisperClient : IDisposable
 {
+    private readonly WhisperOptions _options;
     private readonly AudioProcessor _audioProcessor;
     private readonly IWhisperTranscriptionBackend _transcriptionBackend;
     private bool _disposed;
@@ -21,9 +22,12 @@ public sealed class WhisperClient : IDisposable
         AudioProcessor audioProcessor,
         IWhisperTranscriptionBackend transcriptionBackend)
     {
+        _options = options;
         _audioProcessor = audioProcessor;
         _transcriptionBackend = transcriptionBackend;
     }
+
+    internal WhisperOptions Options => _options;
 
     /// <summary>
     /// Create a new WhisperClient instance with automatic model download if needed.

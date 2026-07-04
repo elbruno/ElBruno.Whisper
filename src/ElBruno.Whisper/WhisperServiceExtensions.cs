@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+#pragma warning disable MEAI001
+using Microsoft.Extensions.AI;
 
 namespace ElBruno.Whisper;
 
@@ -26,6 +28,10 @@ public static class WhisperServiceExtensions
         configure(options);
 
         services.AddSingleton(options);
+        services.AddSingleton<WhisperSpeechToTextClient>(static serviceProvider =>
+            new WhisperSpeechToTextClient(serviceProvider.GetRequiredService<WhisperOptions>()));
+        services.AddSingleton<ISpeechToTextClient>(static serviceProvider =>
+            serviceProvider.GetRequiredService<WhisperSpeechToTextClient>());
 
         return services;
     }
