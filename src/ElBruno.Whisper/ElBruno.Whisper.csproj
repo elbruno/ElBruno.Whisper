@@ -3,12 +3,12 @@
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>ElBruno.Whisper</PackageId>
-    <Description>Local Whisper speech-to-text using ONNX Runtime. Auto-downloads models from HuggingFace and supports incremental rolling transcription updates.</Description>
+    <Description>Local Whisper speech-to-text using ONNX Runtime. Auto-downloads models from HuggingFace and supports WAV plus raw PCM stream, byte, and float inputs.</Description>
     <PackageProjectUrl>https://github.com/elbruno/ElBruno.Whisper</PackageProjectUrl>
     <PackageIcon>nuget_logo.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>whisper;speech-to-text;stt;onnx;ai;local;audio;transcription;streaming;huggingface</PackageTags>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>

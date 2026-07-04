@@ -221,8 +221,10 @@ Error scenarios and recovery:
 | Audio file missing | FileNotFoundException | Check file path |
 | Model download timeout | HttpRequestException | Retry or check internet |
 | Insufficient memory | OutOfMemoryException | Use smaller model |
-| Invalid audio format | InvalidOperationException | Convert to WAV/MP3 |
+| Invalid audio format | WhisperAudioFormatException | Supply a valid WAV stream or the correct `WhisperAudioFormat` for raw PCM |
 | ONNX Runtime not found | DllNotFoundException | Reinstall package |
+
+The raw PCM path keeps caller-owned streams open, avoids temporary files, and uses pooled read buffers before resampling into Whisper's 16 kHz mono format.
 
 ## Threading & Concurrency
 

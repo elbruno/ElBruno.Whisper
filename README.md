@@ -22,6 +22,7 @@ Transcribe audio to text in .NET using OpenAI's Whisper model. Powered by ONNX R
 - 💉 **DI-friendly** — register with `AddWhisper()` in ASP.NET Core
 - 🧵 **Concurrent transcription** — share one client with configurable queueing and pooled inference sessions
 - 🔄 **Incremental updates** — get rolling provisional and committed text through `GetStreamingTextAsync()`
+- 📼 **Raw audio inputs** — transcribe WAV streams, PCM16 byte streams, and Float32 memory without temporary files
 - 📊 **Progress reporting** — track model downloads with real-time callbacks
 - 🎯 **English-optimized models** — dedicated `.en` variants for best accuracy on English audio
 - ⏱️ **Timestamp-aware results** — opt into segment and word timings for subtitle and caption workflows
@@ -185,6 +186,34 @@ Each update exposes:
 - `IsFinal` — true exactly once, after the final flush
 
 **Limitations:** Whisper is not a native streaming model. This API reads completed file or stream content, re-runs inference over overlapping windows, and uses local agreement to reduce duplicate committed text. Provisional text can still change between updates.
+
+## Realtime PCM and Memory Inputs
+
+Use the explicit-audio overloads when your pipeline already has PCM in memory and you want to avoid temporary WAV files:
+
+```csharp
+using var client = await WhisperClient.CreateAsync();
+
+var pcm16Format = new WhisperAudioFormat(
+    sampleRate: 48000,
+    channels: 2,
+    sampleFormat: WhisperAudioSampleFormat.Pcm16);
+
+await using var rawAudioStream = File.OpenRead("call.raw");
+var streamResult = await client.TranscribeAsync(rawAudioStream, pcm16Format);
+
+ReadOnlyMemory<byte> pcmBytes = await File.ReadAllBytesAsync("call.raw");
+var byteResult = await client.TranscribeAsync(pcmBytes, pcm16Format);
+
+ReadOnlyMemory<float> monoFloatSamples = GetNormalizedSamples();
+var floatResult = await client.TranscribeAsync(monoFloatSamples, sampleRate: 16000);
+```
+
+Notes:
+
+- `TranscribeAsync(Stream)` auto-detects WAV headers and keeps the caller-owned stream open.
+- Raw PCM byte streams require `WhisperAudioFormat` so the client can downmix and resample to Whisper's 16 kHz mono input.
+- `ReadOnlyMemory<float>` overloads expect normalized PCM samples in the `[-1, 1]` range.
 
 ## Transcription Result
 

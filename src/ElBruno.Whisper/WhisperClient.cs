@@ -53,7 +53,7 @@ public sealed class WhisperClient : IDisposable
             throw new FileNotFoundException("Audio file not found", audioFilePath);
 
         return TranscribeCoreAsync(
-            () => _audioProcessor.ProcessAudioFile(audioFilePath),
+            ct => _audioProcessor.ProcessAudioFile(audioFilePath, ct),
             cancellationToken);
     }
 
@@ -65,7 +65,60 @@ public sealed class WhisperClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         return TranscribeCoreAsync(
-            () => _audioProcessor.ProcessAudioStream(audioStream),
+            ct => _audioProcessor.ProcessAudioStream(audioStream, ct),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Transcribe audio from a raw PCM stream using an explicit format description.
+    /// WAV streams are detected automatically from the header and do not require a format.
+    /// </summary>
+    public Task<TranscriptionResult> TranscribeAsync(
+        Stream audioStream,
+        WhisperAudioFormat format,
+        CancellationToken cancellationToken = default)
+    {
+        return TranscribeCoreAsync(
+            ct => _audioProcessor.ProcessAudioStream(audioStream, format, ct),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Transcribe audio from raw PCM bytes using an explicit format description.
+    /// </summary>
+    public Task<TranscriptionResult> TranscribeAsync(
+        ReadOnlyMemory<byte> audioData,
+        WhisperAudioFormat format,
+        CancellationToken cancellationToken = default)
+    {
+        return TranscribeCoreAsync(
+            ct => _audioProcessor.ProcessAudioBytes(audioData, format, ct),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Transcribe mono float samples using the provided sample rate.
+    /// </summary>
+    public Task<TranscriptionResult> TranscribeAsync(
+        ReadOnlyMemory<float> monoAudio,
+        int sampleRate,
+        CancellationToken cancellationToken = default)
+    {
+        return TranscribeCoreAsync(
+            ct => _audioProcessor.ProcessAudioSamples(monoAudio, sampleRate, ct),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Transcribe float PCM samples using an explicit format description.
+    /// </summary>
+    public Task<TranscriptionResult> TranscribeAsync(
+        ReadOnlyMemory<float> audioData,
+        WhisperAudioFormat format,
+        CancellationToken cancellationToken = default)
+    {
+        return TranscribeCoreAsync(
+            ct => _audioProcessor.ProcessAudioSamples(audioData, format, ct),
             cancellationToken);
     }
 
@@ -83,7 +136,7 @@ public sealed class WhisperClient : IDisposable
         }
 
         return GetStreamingTextCoreAsync(
-            _audioProcessor.ReadAudioFile(audioFilePath),
+            _audioProcessor.ReadAudioFile(audioFilePath, cancellationToken),
             streamingOptions ?? new WhisperStreamingOptions(),
             cancellationToken);
     }
@@ -97,7 +150,7 @@ public sealed class WhisperClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         return GetStreamingTextCoreAsync(
-            _audioProcessor.ReadAudioStream(audioStream),
+            _audioProcessor.ReadAudioStream(audioStream, cancellationToken),
             streamingOptions ?? new WhisperStreamingOptions(),
             cancellationToken);
     }
@@ -115,7 +168,7 @@ public sealed class WhisperClient : IDisposable
     }
 
     private Task<TranscriptionResult> TranscribeCoreAsync(
-        Func<(float[] MelSpectrogram, TimeSpan Duration)> audioProcessor,
+        Func<CancellationToken, (float[] MelSpectrogram, TimeSpan Duration)> audioProcessor,
         CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -124,7 +177,7 @@ public sealed class WhisperClient : IDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var (melSpec, audioDuration) = audioProcessor();
+            var (melSpec, audioDuration) = audioProcessor(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             return await _transcriptionBackend

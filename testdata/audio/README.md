@@ -104,6 +104,7 @@ The test audio files are used by:
 
 1. **AudioProcessorTests** — Validates mel spectrogram generation
    - Tests file-based and stream-based audio loading
+   - Verifies WAV `MemoryStream`, PCM16 raw streams, Float32 buffers, and 48kHz stereo normalization
    - Verifies output shape [1, 80, 3000] (80 mel bins × 3000 time steps = 30 sec)
    - Ensures finite values (no NaN or infinity)
    - Confirms consistency between file and stream processing

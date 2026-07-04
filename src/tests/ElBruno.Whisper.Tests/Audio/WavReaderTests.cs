@@ -54,7 +54,7 @@ public class WavReaderTests
 
         using var stream = new MemoryStream(invalidData);
         
-        Assert.Throws<InvalidDataException>(() => WavReader.FromStream(stream));
+        Assert.Throws<WhisperAudioFormatException>(() => WavReader.FromStream(stream));
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class WavReaderTests
 
         using var stream = new MemoryStream(tooSmall);
         
-        Assert.Throws<InvalidDataException>(() => WavReader.FromStream(stream));
+        Assert.Throws<WhisperAudioFormatException>(() => WavReader.FromStream(stream));
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class WavReaderTests
 
         using var stream = new MemoryStream(wavBytes);
         
-        Assert.Throws<InvalidDataException>(() => WavReader.FromStream(stream));
+        Assert.Throws<WhisperAudioFormatException>(() => WavReader.FromStream(stream));
     }
 
     [Fact]

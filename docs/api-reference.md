@@ -31,10 +31,38 @@ Transcribe an audio file to text.
 public async Task<TranscriptionResult> TranscribeAsync(
     string audioFilePath,
     CancellationToken cancellationToken = default);
+
+public async Task<TranscriptionResult> TranscribeAsync(
+    Stream audioStream,
+    CancellationToken cancellationToken = default);
+
+public async Task<TranscriptionResult> TranscribeAsync(
+    Stream audioStream,
+    WhisperAudioFormat format,
+    CancellationToken cancellationToken = default);
+
+public async Task<TranscriptionResult> TranscribeAsync(
+    ReadOnlyMemory<byte> audioData,
+    WhisperAudioFormat format,
+    CancellationToken cancellationToken = default);
+
+public async Task<TranscriptionResult> TranscribeAsync(
+    ReadOnlyMemory<float> monoAudio,
+    int sampleRate,
+    CancellationToken cancellationToken = default);
+
+public async Task<TranscriptionResult> TranscribeAsync(
+    ReadOnlyMemory<float> audioData,
+    WhisperAudioFormat format,
+    CancellationToken cancellationToken = default);
 ```
 
 **Parameters:**
-- `audioFilePath` (string) — Path to audio file (WAV, MP3, etc.)
+- `audioFilePath` (string) — Path to an audio file
+- `audioStream` (Stream) — WAV stream content; the caller keeps stream ownership
+- `format` (`WhisperAudioFormat`) — Sample rate, channel count, and sample encoding for raw PCM inputs
+- `audioData` (`ReadOnlyMemory<byte>` / `ReadOnlyMemory<float>`) — In-memory PCM payload
+- `sampleRate` (int) — Source sample rate for mono float samples
 - `cancellationToken` (CancellationToken, optional) — For cancellation support
 
 **Returns:** `TranscriptionResult` containing transcribed text and metadata
@@ -50,8 +78,20 @@ var result = await client.TranscribeAsync("audio.wav");
 Console.WriteLine(result.Text);
 ```
 
+**Raw PCM example:**
+```csharp
+var format = new WhisperAudioFormat(
+    sampleRate: 48000,
+    channels: 2,
+    sampleFormat: WhisperAudioSampleFormat.Pcm16);
+
+await using var stream = File.OpenRead("call.raw");
+var result = await client.TranscribeAsync(stream, format);
+```
+
 **Exceptions:**
 - `FileNotFoundException` — Audio file not found
+- `WhisperAudioFormatException` — The bytes are not valid WAV content and do not match the supplied `WhisperAudioFormat`
 - `InvalidOperationException` — Model failed to load or transcription error
 - `OperationCanceledException` — Transcription was cancelled
 - `TimeoutException` — The request waited longer than `WhisperOptions.Concurrency.QueueTimeout`
@@ -222,6 +262,61 @@ public sealed class WhisperStreamingOptions
 - `StepSize` > 0
 - `ContextOverlap` >= 0 and `< WindowSize`
 - `AgreementIterations` >= 1
+
+---
+
+## WhisperAudioFormat
+
+Describes raw PCM audio so `WhisperClient` can normalize it into Whisper's required 16 kHz mono input.
+
+```csharp
+public readonly record struct WhisperAudioFormat
+{
+    public int SampleRate { get; }
+    public int Channels { get; }
+    public WhisperAudioSampleFormat SampleFormat { get; }
+}
+```
+
+### Example
+
+```csharp
+var format = new WhisperAudioFormat(
+    sampleRate: 48000,
+    channels: 2,
+    sampleFormat: WhisperAudioSampleFormat.Pcm16);
+```
+
+---
+
+## WhisperAudioSampleFormat
+
+Supported raw sample encodings for explicit-audio APIs.
+
+```csharp
+public enum WhisperAudioSampleFormat
+{
+    Pcm16,
+    Float32
+}
+```
+
+### Notes
+
+- `Pcm16` expects signed 16-bit little-endian PCM bytes.
+- `Float32` expects 32-bit IEEE float little-endian PCM bytes or normalized `ReadOnlyMemory<float>` samples.
+
+---
+
+## WhisperAudioFormatException
+
+Typed exception for malformed or unsupported audio input.
+
+```csharp
+public sealed class WhisperAudioFormatException : FormatException
+{
+}
+```
 
 ---
 
