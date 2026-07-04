@@ -78,8 +78,7 @@ public class WhisperClientTests
             .Where(m => m.Name == "TranscribeAsync")
             .ToArray();
 
-        // Should have two overloads: one for file path, one for stream
-        Assert.Equal(2, methods.Length);
+        Assert.Equal(6, methods.Length);
     }
 
     [Fact]
@@ -99,5 +98,14 @@ public class WhisperClientTests
             .ToArray();
 
         Assert.Equal(2, methods.Length);
+    }
+
+    [Fact]
+    public void WhisperClient_HasRawAudioOverloads()
+    {
+        Assert.NotNull(typeof(WhisperClient).GetMethod(nameof(WhisperClient.TranscribeAsync), [typeof(Stream), typeof(WhisperAudioFormat), typeof(CancellationToken)]));
+        Assert.NotNull(typeof(WhisperClient).GetMethod(nameof(WhisperClient.TranscribeAsync), [typeof(ReadOnlyMemory<byte>), typeof(WhisperAudioFormat), typeof(CancellationToken)]));
+        Assert.NotNull(typeof(WhisperClient).GetMethod(nameof(WhisperClient.TranscribeAsync), [typeof(ReadOnlyMemory<float>), typeof(int), typeof(CancellationToken)]));
+        Assert.NotNull(typeof(WhisperClient).GetMethod(nameof(WhisperClient.TranscribeAsync), [typeof(ReadOnlyMemory<float>), typeof(WhisperAudioFormat), typeof(CancellationToken)]));
     }
 }

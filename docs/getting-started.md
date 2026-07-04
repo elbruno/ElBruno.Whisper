@@ -196,6 +196,45 @@ await foreach (var update in client.GetStreamingTextAsync(
 
 > **Important:** Whisper is not a true streaming model. The library simulates incremental output by re-running inference over overlapping windows, so provisional text can change between updates.
 
+## Working with WAV Streams and Raw PCM
+
+Use the stream overload directly when you already have WAV content in memory:
+
+```csharp
+using var client = await WhisperClient.CreateAsync();
+
+await using var wavStream = File.OpenRead("audio.wav");
+var wavResult = await client.TranscribeAsync(wavStream);
+```
+
+For raw PCM bytes or non-file streams, provide an explicit `WhisperAudioFormat`:
+
+```csharp
+var format = new WhisperAudioFormat(
+    sampleRate: 48000,
+    channels: 2,
+    sampleFormat: WhisperAudioSampleFormat.Pcm16);
+
+await using var rawPcmStream = File.OpenRead("audio.pcm");
+var rawResult = await client.TranscribeAsync(rawPcmStream, format);
+```
+
+If you already have normalized float samples in memory, use the float overload:
+
+```csharp
+ReadOnlyMemory<float> monoSamples = GetMicrophoneBuffer();
+
+using var client = await WhisperClient.CreateAsync();
+var result = await client.TranscribeAsync(monoSamples, sampleRate: 16000);
+```
+
+These overloads:
+
+- Keep ownership of the input stream with the caller
+- Avoid temporary WAV files
+- Downmix multi-channel input to mono and resample to 16 kHz automatically
+- Throw `WhisperAudioFormatException` when the input bytes do not match the provided format
+
 ## Transcription
 
 ### Basic Transcription

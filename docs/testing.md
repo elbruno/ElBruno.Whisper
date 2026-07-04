@@ -14,13 +14,14 @@ These tests verify individual components without downloading models or accessing
 
 **Coverage:**
 - `Audio/` — WAV parsing, audio processing, mel spectrogram generation
+- Raw PCM byte, stream, and float-memory normalization coverage
 - `Inference/` — ONNX inference session, cache management, pooled session concurrency, metrics
 - `WhisperClientTests.cs` — Client initialization and error handling
 - Model definitions, options validation, tokenization
 
 **Run unit tests only:**
 ```bash
-dotnet test ElBruno.Whisper.slnx --filter "Category!=Integration"
+dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0 --filter "Category!=Integration"
 ```
 
 **Expected runtime:** < 30 seconds on modern hardware
@@ -41,7 +42,7 @@ These tests download real Whisper models from HuggingFace and perform end-to-end
 
 **Run integration tests only:**
 ```bash
-dotnet test ElBruno.Whisper.slnx --filter "Category=Integration"
+dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0 --filter "Category=Integration"
 ```
 
 **Expected runtime:** 5-15 minutes (first run with model download), <1 minute with cached model
@@ -103,33 +104,66 @@ private static string GetTestDataPath(string fileName)
 
 ### All Tests
 ```bash
-dotnet test ElBruno.Whisper.slnx
+dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0
 ```
 
 ### Quick Build Check (No Tests)
 ```bash
-dotnet build ElBruno.Whisper.slnx
+dotnet build src/ElBruno.Whisper/ElBruno.Whisper.csproj -p:TargetFrameworks=net8.0
+dotnet build src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj -p:TargetFrameworks=net8.0
 ```
 
 ### Specific Test Class
 ```bash
-dotnet test ElBruno.Whisper.slnx --filter "AudioProcessorTests"
+dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0 --filter "AudioProcessorTests"
 ```
 
 ### Specific Test Method
 ```bash
-dotnet test ElBruno.Whisper.slnx --filter "ProcessAudioFile_ReturnsExpectedLength"
+dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0 --filter "ProcessAudioFile_ReturnsExpectedLength"
 ```
 
 ### Verbose Output
 ```bash
-dotnet test ElBruno.Whisper.slnx -v detailed
+dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0 -v detailed
 ```
 
 ### With Coverage (requires coverlet)
 ```bash
-dotnet test ElBruno.Whisper.slnx /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0 /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
 ```
+
+## Manual Allocation and Latency Benchmarking
+
+Use this lightweight harness when comparing file, WAV stream, and raw PCM preprocessing paths:
+
+```csharp
+using System.Diagnostics;
+using ElBruno.Whisper;
+
+using var client = await WhisperClient.CreateAsync();
+var format = new WhisperAudioFormat(48000, 2, WhisperAudioSampleFormat.Pcm16);
+var payload = await File.ReadAllBytesAsync("call.raw");
+
+var beforeBytes = GC.GetAllocatedBytesForCurrentThread();
+var stopwatch = Stopwatch.StartNew();
+
+var result = await client.TranscribeAsync(payload, format);
+
+stopwatch.Stop();
+var allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - beforeBytes;
+
+Console.WriteLine($"Latency: {stopwatch.ElapsedMilliseconds} ms");
+Console.WriteLine($"Allocated: {allocatedBytes / 1024.0:F1} KB");
+Console.WriteLine(result.Text);
+```
+
+Capture the same workload across:
+
+1. `TranscribeAsync("audio.wav")`
+2. `TranscribeAsync(Stream)` with WAV input
+3. `TranscribeAsync(Stream, WhisperAudioFormat)` with raw PCM
+4. `TranscribeAsync(ReadOnlyMemory<byte>, WhisperAudioFormat)` with raw PCM bytes
 
 ## CI/CD Pipeline
 
@@ -250,6 +284,7 @@ As of the latest version:
 
 - **Total tests:** Varies with recent changes
 - **Unit tests:** Include dedicated coverage for pooled session reuse, queue timeout, and cancellation
+- **Audio input tests:** Include WAV memory streams plus PCM16 and Float32 raw input normalization
 - **Integration tests:** Include shared-client concurrency coverage with real models
 - **Code coverage:** Core library coverage via integration tests
 - **xUnit framework:** v2.9.3
