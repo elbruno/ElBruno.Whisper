@@ -1,0 +1,69 @@
+@inject IJSRuntime JS
+@inject ITranscriptionHistoryStore HistoryStore
+
+<div class="card border-secondary h-100">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Transcription history</strong>
+        @if (ShowClearAll)
+        {
+            <button class="btn btn-sm btn-outline-danger" @onclick="ClearAsync">Clear all</button>
+        }
+    </div>
+    <div class="card-body">
+        @if (_entries.Count == 0)
+        {
+            <p class="text-muted mb-0">No transcriptions yet.</p>
+        }
+        else
+        {
+            @foreach (var item in _entries)
+            {
+                <details class="mb-3">
+                    <summary>
+                        <strong>@item.SourceFileName</strong>
+                        <small class="text-muted ms-2">
+                            @item.CreatedAt.ToLocalTime().ToString("g")
+                            · @item.Duration.TotalSeconds:F1s
+                            @if (!string.IsNullOrWhiteSpace(item.Language))
+                            {
+                                <span>· @item.Language</span>
+                            }
+                        </small>
+                    </summary>
+                    <div class="mt-2">
+                        <p class="mb-2">@item.Transcript</p>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => CopyAsync(item.Transcript))">Copy</button>
+                    </div>
+                </details>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int MaxItems { get; set; } = 20;
+
+    [Parameter]
+    public bool ShowClearAll { get; set; } = true;
+
+    private IReadOnlyList<TranscriptionHistoryEntry> _entries = [];
+
+    protected override void OnParametersSet()
+    {
+        _entries = HistoryStore.GetEntries(MaxItems);
+    }
+
+    private Task CopyAsync(string transcript)
+    {
+        return JS.InvokeVoidAsync("navigator.clipboard.writeText", transcript).AsTask();
+    }
+
+    private Task ClearAsync()
+    {
+        HistoryStore.Clear();
+        _entries = HistoryStore.GetEntries(MaxItems);
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+}

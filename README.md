@@ -13,6 +13,13 @@
 
 Transcribe audio to text in .NET using OpenAI's Whisper model. Powered by ONNX Runtime with automatic model download from HuggingFace.
 
+## Packages
+
+| Package | NuGet | Downloads | Description |
+|---------|-------|-----------|-------------|
+| `ElBruno.Whisper` | [![NuGet](https://img.shields.io/nuget/v/ElBruno.Whisper.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ElBruno.Whisper) | [![NuGet Downloads](https://img.shields.io/nuget/dt/ElBruno.Whisper.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ElBruno.Whisper) | Core speech-to-text library with Whisper ONNX models |
+| `ElBruno.Whisper.BlazorComponents` | [![NuGet](https://img.shields.io/nuget/v/ElBruno.Whisper.BlazorComponents.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ElBruno.Whisper.BlazorComponents) | [![NuGet Downloads](https://img.shields.io/nuget/dt/ElBruno.Whisper.BlazorComponents.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ElBruno.Whisper.BlazorComponents) | Reusable Blazor components for transcription workflows |
+
 ## Features
 
 - 📦 **Automatic model download** — models are fetched from HuggingFace on first use
@@ -259,6 +266,28 @@ Notes:
 - Raw PCM byte streams require `WhisperAudioFormat` so the client can downmix and resample to Whisper's 16 kHz mono input.
 - `ReadOnlyMemory<float>` overloads expect normalized PCM samples in the `[-1, 1]` range.
 
+## Blazor Components Package
+
+Build speech-to-text interfaces quickly with `ElBruno.Whisper.BlazorComponents`:
+
+```bash
+dotnet add package ElBruno.Whisper.BlazorComponents
+```
+
+```csharp
+builder.Services.AddWhisper(options =>
+{
+    options.Model = KnownWhisperModels.WhisperBaseEn;
+});
+builder.Services.AddWhisperBlazorComponents();
+```
+
+Available components:
+- `WhisperModelSelector`
+- `FileTranscriptionPanel`
+- `LiveTranscriptViewer`
+- `TranscriptionHistoryList`
+
 ## Transcription Result
 
 The `TranscriptionResult` includes:
@@ -312,6 +341,20 @@ For detailed troubleshooting, see [docs](docs/).
 |--------|-------------|
 | [HelloWhisper](src/samples/HelloWhisper) | Minimal console transcription |
 | [BlazorWhisper](src/samples/BlazorWhisper) | Blazor app with audio recording and real-time transcription |
+| [Blazor Components demo page](src/samples/BlazorWhisper/Components/Pages/BlazorComponentsDemo.razor) | Demonstrates the reusable Blazor components package |
+
+## What's New
+
+1. **Blazor Components package** — Added `ElBruno.Whisper.BlazorComponents` with model selector, file transcription panel, live transcript viewer, and transcription history list.
+2. **Real-time Blazor transcription sample** — Added chunk-based live transcription UX in the `BlazorWhisper` sample.
+3. **Timestamp-aware transcription results** — Added optional segment timestamps in `TranscriptionResult`.
+4. **Model download progress reporting** — Added structured progress callbacks during model download.
+5. **OIDC trusted publishing** — Added secure NuGet publishing with GitHub Actions and `NuGet/login`.
+
+### Repository rule: keep last 5 important features
+
+- The **What’s New** section must always list the latest 5 important repository/library features.
+- Before every NuGet release, validate whether the release introduces a notable change and add/update an entry when needed.
 
 ## Documentation
 
@@ -319,6 +362,8 @@ For detailed troubleshooting, see [docs](docs/).
 - [API Reference](docs/api-reference.md) — full API documentation
 - [Architecture](docs/architecture.md) — design decisions and internal structure
 - [Testing Guide](docs/testing.md) — running tests, test organization, CI/CD pipeline
+- [Blazor Components](docs/blazor-components.md) — component API and integration guide
+- [Blazor Components Sample](docs/blazor-components-sample.md) — walkthrough for the sample page
 - [Test Audio Files](testdata/audio/README.md) — audio resources for testing and transcription validation
 - [Image Prompts](docs/image-prompts.md) — prompts for generating blog and social media images
 - [Publishing](docs/publishing.md) — NuGet package publishing with OIDC

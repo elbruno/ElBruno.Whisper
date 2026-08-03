@@ -1,0 +1,58 @@
+@page "/blazor-components"
+@using ElBruno.Whisper
+@using ElBruno.Whisper.BlazorComponents.Components
+@using ElBruno.Whisper.BlazorComponents.Models
+@using ElBruno.Whisper.BlazorComponents.Services
+@inject IWhisperModelManager ModelManager
+@inject IWhisperService WhisperService
+
+<h2 class="mb-4">
+    <i class="bi bi-grid-3x3-gap text-primary me-2"></i>Blazor Components Demo
+</h2>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <WhisperModelSelector ModelManager="@ModelManager" OnModelSelected="OnModelSelected" />
+    </div>
+    <div class="col-lg-8">
+        <FileTranscriptionPanel WhisperService="@WhisperService"
+                                SelectedModelId="@_selectedModelId"
+                                OnTranscribed="OnTranscribed" />
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-6">
+        <LiveTranscriptViewer WhisperService="@WhisperService"
+                              ShowTimestamps="true"
+                              ShowLanguageBadge="true" />
+    </div>
+    <div class="col-lg-6">
+        <TranscriptionHistoryList MaxItems="20" ShowClearAll="true" />
+    </div>
+</div>
+
+@if (_lastResult is not null)
+{
+    <div class="alert alert-secondary mt-4">
+        <strong>Last transcription:</strong>
+        <div class="mt-2">@_lastResult.Text</div>
+    </div>
+}
+
+@code {
+    private string? _selectedModelId = KnownWhisperModels.WhisperTinyEn.Id;
+    private TranscriptionResult? _lastResult;
+
+    private Task OnModelSelected(WhisperModelInfo model)
+    {
+        _selectedModelId = model.Id;
+        return Task.CompletedTask;
+    }
+
+    private Task OnTranscribed(TranscriptionResult result)
+    {
+        _lastResult = result;
+        return Task.CompletedTask;
+    }
+}

@@ -67,6 +67,10 @@ cd src/samples/BlazorWhisper
 dotnet run
 ```
 
+The Blazor sample includes a dedicated page for the reusable components package:
+
+- `/blazor-components` → `src/samples/BlazorWhisper/Components/Pages/BlazorComponentsDemo.razor`
+
 ## Test Data
 
 All tests use audio files from `testdata/audio/`:
@@ -172,9 +176,9 @@ Capture the same workload across:
 The repository uses GitHub Actions (`.github/workflows/ci.yml`) to:
 
 1. **Trigger:** On push to `main` or pull request
-2. **Setup:** .NET 8.0 SDK
-3. **Build:** Library and test projects targeting `net8.0`
-4. **Test (Unit):** `dotnet test --filter "Category!=Integration"` — Fast verification
+2. **Setup:** .NET 8.0 and .NET 10.0 SDKs
+3. **Build:** Core package, Blazor components package, test project, and Blazor sample
+4. **Test (Unit):** `dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0 --filter "Category!=Integration"` — Fast verification
 5. **Artifacts:** Test results uploaded for analysis
 
 ### Publishing Workflow
@@ -182,8 +186,10 @@ The repository uses GitHub Actions (`.github/workflows/ci.yml`) to:
 The repository uses GitHub Actions (`.github/workflows/publish.yml`) to:
 
 1. **Trigger:** On GitHub Release or manual workflow dispatch
-2. **Build & Test:** Release build plus unit tests
-3. **Pack:** NuGet package creation
+2. **Build & Test:** Full release build with unit tests only
+3. **Pack:** NuGet package creation for:
+   - `ElBruno.Whisper`
+   - `ElBruno.Whisper.BlazorComponents`
 4. **Publish:** Push to NuGet.org with OIDC authentication
 
 ## Troubleshooting

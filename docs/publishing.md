@@ -4,7 +4,7 @@
 
 ElBruno.Whisper publishes NuGet packages automatically via GitHub Actions using **OIDC trusted publishing** — no API keys or stored secrets required.
 
-**Flow:** Create GitHub Release → GitHub Actions workflow triggers → builds, tests, packs → authenticates with NuGet.org via OIDC → pushes package.
+**Flow:** Create GitHub Release → GitHub Actions workflow triggers → builds, tests, packs → authenticates with NuGet.org via OIDC → pushes package(s).
 
 ## Prerequisites
 
@@ -56,10 +56,13 @@ jobs:
             8.0.x
             10.0.x
 
-      - run: dotnet build ElBruno.Whisper.slnx -c Release
-      - run: dotnet test ElBruno.Whisper.slnx -c Release --no-build
+      - run: dotnet build src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-restore -p:TargetFrameworks=net8.0
+      - run: dotnet build src/ElBruno.Whisper.BlazorComponents/ElBruno.Whisper.BlazorComponents.csproj -c Release --no-restore -p:TargetFrameworks=net8.0
+      - run: dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj -c Release --no-build --framework net8.0 --filter "Category!=Integration"
 
-      - run: dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-build
+      - run: |
+          dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-build -p:TargetFrameworks=net8.0
+          dotnet pack src/ElBruno.Whisper.BlazorComponents/ElBruno.Whisper.BlazorComponents.csproj -c Release --no-build -p:TargetFrameworks=net8.0
 
       # OIDC login — no API key needed
       - name: NuGet OIDC Login
@@ -103,13 +106,19 @@ Use pre-release suffixes for early releases:
 
 ### Step 1: Update Version (if needed)
 
-If you want the version to come from the csproj rather than the release tag, update it:
+If you want the version to come from the csproj rather than the release tag, update both packable projects:
 
 ```xml
 <!-- src/ElBruno.Whisper/ElBruno.Whisper.csproj -->
 <PropertyGroup>
     <Version>1.1.0</Version>
-    <PackageVersion>1.1.0</PackageVersion>
+</PropertyGroup>
+```
+
+```xml
+<!-- src/ElBruno.Whisper.BlazorComponents/ElBruno.Whisper.BlazorComponents.csproj -->
+<PropertyGroup>
+    <Version>1.1.0</Version>
 </PropertyGroup>
 ```
 
@@ -137,7 +146,7 @@ If you want the version to come from the csproj rather than the release tag, upd
 
 ## Package Structure
 
-The published NuGet package includes:
+The published NuGet artifacts include:
 
 ```
 ElBruno.Whisper.1.1.0.nupkg
@@ -151,6 +160,14 @@ ElBruno.Whisper.1.1.0.nupkg
 ├── nuget_logo.png
 ├── README.md
 ├── LICENSE
+└── .nuspec (metadata)
+
+ElBruno.Whisper.BlazorComponents.1.1.0.nupkg
+├── lib/
+│   ├── net8.0/
+│   └── net10.0/
+├── nuget_logo.png
+├── README.md
 └── .nuspec (metadata)
 ```
 
@@ -195,9 +212,10 @@ dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release
 - [ ] Run full test suite: `dotnet test ElBruno.Whisper.slnx -c Release`
 - [ ] Build all frameworks: `dotnet build ElBruno.Whisper.slnx -c Release`
 - [ ] Review README and documentation
+- [ ] Validate README **What’s New** (keep latest 5 important features and add an entry if this release introduces one)
 - [ ] Create GitHub release with descriptive notes
 - [ ] Monitor GitHub Actions workflow
-- [ ] Verify package on NuGet.org within 10 minutes
+- [ ] Verify package(s) on NuGet.org within 10 minutes
 
 ## Related Documentation
 

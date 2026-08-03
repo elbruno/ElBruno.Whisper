@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src\ElBruno.Whisper\ElBruno.Whisper.csproj" />
+    <Project Path="src\ElBruno.Whisper.BlazorComponents\ElBruno.Whisper.BlazorComponents.csproj" />
   </Folder>
   <Folder Name="/src/tests/">
     <Project Path="src\tests\ElBruno.Whisper.Tests\ElBruno.Whisper.Tests.csproj" />

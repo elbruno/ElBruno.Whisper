@@ -1,9 +1,14 @@
+using ElBruno.Whisper;
+using ElBruno.Whisper.BlazorComponents.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddWhisper();
+builder.Services.AddWhisperBlazorComponents();
 
 var app = builder.Build();
 

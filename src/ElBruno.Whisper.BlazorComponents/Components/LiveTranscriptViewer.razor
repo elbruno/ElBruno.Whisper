@@ -1,0 +1,79 @@
+@implements IDisposable
+
+<div class="card border-secondary h-100">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Live transcript</strong>
+        @if (ShowLanguageBadge && !string.IsNullOrWhiteSpace(_currentLanguage))
+        {
+            <span class="badge bg-secondary">@_currentLanguage</span>
+        }
+    </div>
+    <div class="card-body">
+        @if (!string.IsNullOrWhiteSpace(_interimText))
+        {
+            <div class="mb-3">
+                <small class="text-muted">Interim</small>
+                <div><em>@_interimText</em></div>
+            </div>
+        }
+
+        @if (_finalSegments.Count == 0)
+        {
+            <p class="text-muted mb-0">No transcript available yet.</p>
+        }
+        else
+        {
+            @foreach (var segment in _finalSegments)
+            {
+                <div class="mb-2">
+                    @if (ShowTimestamps)
+                    {
+                        <small class="text-muted me-2">@segment.Timestamp.ToLocalTime().ToString("HH:mm:ss")</small>
+                    }
+                    <span>@segment.Text</span>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required IWhisperService WhisperService { get; set; }
+
+    [Parameter]
+    public bool ShowTimestamps { get; set; }
+
+    [Parameter]
+    public bool ShowLanguageBadge { get; set; } = true;
+
+    private readonly List<LiveTranscriptUpdate> _finalSegments = [];
+    private string? _interimText;
+    private string? _currentLanguage;
+
+    protected override void OnInitialized()
+    {
+        WhisperService.TranscriptUpdated += OnTranscriptUpdated;
+    }
+
+    private void OnTranscriptUpdated(object? sender, LiveTranscriptUpdate update)
+    {
+        _currentLanguage = update.Language ?? _currentLanguage;
+        if (update.IsFinal)
+        {
+            _finalSegments.Add(update);
+            _interimText = null;
+        }
+        else
+        {
+            _interimText = update.Text;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        WhisperService.TranscriptUpdated -= OnTranscriptUpdated;
+    }
+}

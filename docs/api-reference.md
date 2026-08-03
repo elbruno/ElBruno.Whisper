@@ -248,7 +248,7 @@ Configuration for WhisperClient.
 public class WhisperOptions
 {
     // Which model to use (default: WhisperTinyEn)
-    public string Model { get; set; } = KnownWhisperModels.WhisperTinyEn;
+    public WhisperModelDefinition Model { get; set; } = KnownWhisperModels.WhisperTinyEn;
     
     // Skip download if already cached (default: true)
     public bool EnsureModelDownloaded { get; set; } = true;
@@ -469,7 +469,8 @@ KnownWhisperModels.WhisperTiny        // 39M parameters, 75 MB
 KnownWhisperModels.WhisperBase        // 74M parameters, 140 MB
 KnownWhisperModels.WhisperSmall       // 244M parameters, 460 MB
 KnownWhisperModels.WhisperMedium      // 769M parameters, 1.5 GB
-KnownWhisperModels.WhisperLarge       // 1550M parameters, 3.0 GB
+KnownWhisperModels.WhisperLargeV3        // 1550M parameters, 3.0 GB
+KnownWhisperModels.WhisperLargeV3Turbo   // 646M optimized large model
 ```
 
 ### Example
@@ -593,6 +594,33 @@ builder.Services.AddWhisper(options =>
 ```
 
 `AddWhisper()` registers `WhisperOptions`. Create and manage the lifetime of `WhisperClient` yourself so you can decide when to share it and when to dispose it.
+
+---
+
+## Blazor Components APIs
+
+The `ElBruno.Whisper.BlazorComponents` package adds UI-ready abstractions:
+
+```csharp
+builder.Services.AddWhisper(options => { ... });
+builder.Services.AddWhisperBlazorComponents(options =>
+{
+    options.MaxHistoryItems = 50;
+});
+```
+
+Key services:
+
+- `IWhisperService` — file/stream transcription wrapper that emits transcript updates.
+- `IWhisperModelManager` — model catalog and download state management.
+- `ITranscriptionHistoryStore` — in-memory transcription history.
+
+Core components:
+
+- `WhisperModelSelector`
+- `FileTranscriptionPanel`
+- `LiveTranscriptViewer`
+- `TranscriptionHistoryList`
 
 ---
 

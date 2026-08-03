@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ElBruno.Whisper\ElBruno.Whisper.csproj" />
+    <ProjectReference Include="..\..\ElBruno.Whisper.BlazorComponents\ElBruno.Whisper.BlazorComponents.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\..\..\testdata\audio\*">

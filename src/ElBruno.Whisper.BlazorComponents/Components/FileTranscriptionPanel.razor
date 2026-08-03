@@ -1,0 +1,153 @@
+@inject IJSRuntime JS
+@inject ITranscriptionHistoryStore HistoryStore
+
+<div class="card border-secondary h-100">
+    <div class="card-header">
+        <strong>File transcription</strong>
+    </div>
+    <div class="card-body">
+        <InputFile class="form-control mb-3" accept=".wav,.mp3,.ogg,.flac" OnChange="OnFileSelected" disabled="@_isBusy" />
+
+        @if (_selectedFile is not null)
+        {
+            <p class="text-muted mb-3">@_selectedFile.Name (@FormatSize(_selectedFile.Size))</p>
+        }
+
+        <button class="btn btn-primary mb-3" @onclick="TranscribeAsync" disabled="@(_isBusy || _selectedFile is null)">
+            @if (_isBusy)
+            {
+                <span class="spinner-border spinner-border-sm me-2"></span><span>Transcribing...</span>
+            }
+            else
+            {
+                <span>Transcribe</span>
+            }
+        </button>
+
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="alert alert-danger">@_errorMessage</div>
+        }
+
+        @if (_result is not null)
+        {
+            <div class="border rounded p-3 bg-body-tertiary">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <small class="text-muted">
+                        @if (!string.IsNullOrWhiteSpace(_result.DetectedLanguage))
+                        {
+                            <span class="me-2">@_result.DetectedLanguage</span>
+                        }
+                        <span>@_result.Duration.TotalSeconds:F1s</span>
+                    </small>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="CopyResultAsync">Copy</button>
+                </div>
+                <div>@_result.Text</div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required IWhisperService WhisperService { get; set; }
+
+    [Parameter]
+    public string? SelectedModelId { get; set; }
+
+    [Parameter]
+    public EventCallback<TranscriptionResult> OnTranscribed { get; set; }
+
+    private IBrowserFile? _selectedFile;
+    private TranscriptionResult? _result;
+    private bool _isBusy;
+    private string? _errorMessage;
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+        _result = null;
+        _errorMessage = null;
+    }
+
+    private async Task TranscribeAsync()
+    {
+        if (_selectedFile is null)
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _errorMessage = null;
+        _result = null;
+
+        var tempFilePath = Path.Combine(Path.GetTempPath(), $"whisper_upload_{Guid.NewGuid():N}_{_selectedFile.Name}");
+
+        try
+        {
+            await using (var destinationStream = new FileStream(tempFilePath, FileMode.Create))
+            {
+                await _selectedFile.OpenReadStream(maxAllowedSize: 200 * 1024 * 1024).CopyToAsync(destinationStream);
+            }
+
+            _result = await WhisperService.TranscribeAsync(tempFilePath, SelectedModelId);
+            HistoryStore.AddEntry(new TranscriptionHistoryEntry
+            {
+                Id = Guid.NewGuid(),
+                SourceFileName = _selectedFile.Name,
+                Transcript = _result.Text,
+                Duration = _result.Duration,
+                Language = _result.DetectedLanguage,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+
+            await OnTranscribed.InvokeAsync(_result);
+        }
+        catch (OperationCanceledException)
+        {
+            _errorMessage = "The transcription operation was canceled.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        catch (IOException ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+            if (File.Exists(tempFilePath))
+            {
+                File.Delete(tempFilePath);
+            }
+        }
+    }
+
+    private Task CopyResultAsync()
+    {
+        return _result is null
+            ? Task.CompletedTask
+            : JS.InvokeVoidAsync("navigator.clipboard.writeText", _result.Text).AsTask();
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024)
+        {
+            return $"{bytes} B";
+        }
+
+        if (bytes < 1024 * 1024)
+        {
+            return $"{bytes / 1024.0:F1} KB";
+        }
+
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+}

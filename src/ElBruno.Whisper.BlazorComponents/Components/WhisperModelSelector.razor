@@ -1,0 +1,108 @@
+<div class="card border-secondary">
+    <div class="card-header">
+        <strong>Whisper model</strong>
+    </div>
+    <div class="card-body">
+        <select class="form-select mb-3" @onchange="HandleModelChanged" value="@_selectedModelId" disabled="@_isBusy">
+            @foreach (var model in _models)
+            {
+                <option value="@model.Id">@model.DisplayName (@model.Size)</option>
+            }
+        </select>
+
+        @if (_selectedModel is not null)
+        {
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted">State</span>
+                @switch (_selectedModel.State)
+                {
+                    case WhisperModelState.Downloaded:
+                        <span class="badge bg-success">Downloaded</span>
+                        break;
+                    case WhisperModelState.Downloading:
+                        <span class="badge bg-warning text-dark">Downloading</span>
+                        break;
+                    default:
+                        <span class="badge bg-secondary">Not downloaded</span>
+                        break;
+                }
+            </div>
+
+            @if (_selectedModel.State == WhisperModelState.Downloading)
+            {
+                <div class="progress mb-3" style="height: 6px;">
+                    <div class="progress-bar" role="progressbar" style="width: @_selectedModel.DownloadPercent%"></div>
+                </div>
+            }
+
+            @if (_selectedModel.State != WhisperModelState.Downloaded)
+            {
+                <button class="btn btn-outline-primary btn-sm" @onclick="DownloadSelectedModelAsync" disabled="@_isBusy">
+                    Download model
+                </button>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required IWhisperModelManager ModelManager { get; set; }
+
+    [Parameter]
+    public EventCallback<WhisperModelInfo> OnModelSelected { get; set; }
+
+    private IReadOnlyList<WhisperModelInfo> _models = [];
+    private WhisperModelInfo? _selectedModel;
+    private string? _selectedModelId;
+    private bool _isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadModelsAsync();
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        _models = await ModelManager.GetModelsAsync();
+        if (_models.Count == 0)
+        {
+            _selectedModel = null;
+            _selectedModelId = null;
+            return;
+        }
+
+        _selectedModelId ??= _models[0].Id;
+        _selectedModel = _models.FirstOrDefault(m => m.Id == _selectedModelId) ?? _models[0];
+        await OnModelSelected.InvokeAsync(_selectedModel);
+    }
+
+    private async Task HandleModelChanged(ChangeEventArgs args)
+    {
+        var modelId = args.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            return;
+        }
+
+        _selectedModelId = modelId;
+        _selectedModel = _models.FirstOrDefault(m => m.Id == modelId);
+        if (_selectedModel is not null)
+        {
+            await OnModelSelected.InvokeAsync(_selectedModel);
+        }
+    }
+
+    private async Task DownloadSelectedModelAsync()
+    {
+        if (_selectedModel is null)
+        {
+            return;
+        }
+
+        _isBusy = true;
+        await ModelManager.DownloadModelAsync(_selectedModel.Id);
+        await LoadModelsAsync();
+        _isBusy = false;
+    }
+}
