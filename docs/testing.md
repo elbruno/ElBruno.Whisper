@@ -108,13 +108,13 @@ private static string GetTestDataPath(string fileName)
 
 ### All Tests
 ```bash
-dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0
+dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj
 ```
 
 ### Quick Build Check (No Tests)
 ```bash
-dotnet build src/ElBruno.Whisper/ElBruno.Whisper.csproj -p:TargetFrameworks=net8.0
-dotnet build src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj -p:TargetFrameworks=net8.0
+dotnet build src/ElBruno.Whisper/ElBruno.Whisper.csproj
+dotnet build src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj
 ```
 
 ### Specific Test Class
@@ -176,9 +176,9 @@ Capture the same workload across:
 The repository uses GitHub Actions (`.github/workflows/ci.yml`) to:
 
 1. **Trigger:** On push to `main` or pull request
-2. **Setup:** .NET 8.0 and .NET 10.0 SDKs
+2. **Setup:** .NET 8.0, .NET 10.0, and .NET 11.0 SDKs
 3. **Build:** Core package, Blazor components package, test project, and Blazor sample
-4. **Test (Unit):** `dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --framework net8.0 --filter "Category!=Integration"` — Fast verification
+4. **Test (Unit):** `dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --filter "Category!=Integration"`: runs unit tests for all target frameworks
 5. **Artifacts:** Test results uploaded for analysis
 
 ### Publishing Workflow

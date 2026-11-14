@@ -55,14 +55,15 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
+            11.0.x
 
-      - run: dotnet build src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-restore -p:TargetFrameworks=net8.0
-      - run: dotnet build src/ElBruno.Whisper.BlazorComponents/ElBruno.Whisper.BlazorComponents.csproj -c Release --no-restore -p:TargetFrameworks=net8.0
-      - run: dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj -c Release --no-build --framework net8.0 --filter "Category!=Integration"
+      - run: dotnet build src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-restore
+      - run: dotnet build src/ElBruno.Whisper.BlazorComponents/ElBruno.Whisper.BlazorComponents.csproj -c Release --no-restore
+      - run: dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj -c Release --no-build --filter "Category!=Integration"
 
       - run: |
-          dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-build -p:TargetFrameworks=net8.0
-          dotnet pack src/ElBruno.Whisper.BlazorComponents/ElBruno.Whisper.BlazorComponents.csproj -c Release --no-build -p:TargetFrameworks=net8.0
+          dotnet pack src/ElBruno.Whisper/ElBruno.Whisper.csproj -c Release --no-build
+          dotnet pack src/ElBruno.Whisper.BlazorComponents/ElBruno.Whisper.BlazorComponents.csproj -c Release --no-build
 
       # OIDC login — no API key needed
       - name: NuGet OIDC Login
@@ -154,7 +155,10 @@ ElBruno.Whisper.1.1.0.nupkg
 │   ├── net8.0/
 │   │   ├── ElBruno.Whisper.dll
 │   │   └── ElBruno.Whisper.pdb
-│   └── net10.0/
+│   ├── net10.0/
+│   │   ├── ElBruno.Whisper.dll
+│   │   └── ElBruno.Whisper.pdb
+│   └── net11.0/
 │       ├── ElBruno.Whisper.dll
 │       └── ElBruno.Whisper.pdb
 ├── nuget_logo.png
@@ -165,7 +169,8 @@ ElBruno.Whisper.1.1.0.nupkg
 ElBruno.Whisper.BlazorComponents.1.1.0.nupkg
 ├── lib/
 │   ├── net8.0/
-│   └── net10.0/
+│   ├── net10.0/
+│   └── net11.0/
 ├── nuget_logo.png
 ├── README.md
 └── .nuspec (metadata)
