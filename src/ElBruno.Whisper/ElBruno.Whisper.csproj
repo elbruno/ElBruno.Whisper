@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net10.0;net11.0</TargetFrameworks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>ElBruno.Whisper</PackageId>
     <Description>Local Whisper speech-to-text using ONNX Runtime. Auto-downloads models from HuggingFace and supports WAV plus raw PCM stream, byte, and float inputs.</Description>
@@ -8,18 +8,18 @@
     <PackageIcon>nuget_logo.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>whisper;speech-to-text;stt;onnx;ai;local;audio;transcription;streaming;huggingface</PackageTags>
-    <Version>0.8.0</Version>
+    <Version>0.10.0</Version>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ElBruno.HuggingFace.Downloader" Version="0.6.0" />
+    <PackageReference Include="ElBruno.HuggingFace.Downloader" Version="1.6.2" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.7.0" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.22.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
   </ItemGroup>
 
   <ItemGroup>

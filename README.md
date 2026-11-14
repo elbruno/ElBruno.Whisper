@@ -20,6 +20,8 @@ Transcribe audio to text in .NET using OpenAI's Whisper model. Powered by ONNX R
 | `ElBruno.Whisper` | [![NuGet](https://img.shields.io/nuget/v/ElBruno.Whisper.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ElBruno.Whisper) | [![NuGet Downloads](https://img.shields.io/nuget/dt/ElBruno.Whisper.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ElBruno.Whisper) | Core speech-to-text library with Whisper ONNX models |
 | `ElBruno.Whisper.BlazorComponents` | [![NuGet](https://img.shields.io/nuget/v/ElBruno.Whisper.BlazorComponents.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ElBruno.Whisper.BlazorComponents) | [![NuGet Downloads](https://img.shields.io/nuget/dt/ElBruno.Whisper.BlazorComponents.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ElBruno.Whisper.BlazorComponents) | Reusable Blazor components for transcription workflows |
 
+Both packages target .NET 8, .NET 10, and .NET 11.
+
 ## Features
 
 - 📦 **Automatic model download** — models are fetched from HuggingFace on first use
@@ -345,11 +347,11 @@ For detailed troubleshooting, see [docs](docs/).
 
 ## What's New
 
-1. **Blazor Components package** — Added `ElBruno.Whisper.BlazorComponents` with model selector, file transcription panel, live transcript viewer, and transcription history list.
-2. **Real-time Blazor transcription sample** — Added chunk-based live transcription UX in the `BlazorWhisper` sample.
-3. **Timestamp-aware transcription results** — Added optional segment timestamps in `TranscriptionResult`.
-4. **Model download progress reporting** — Added structured progress callbacks during model download.
-5. **OIDC trusted publishing** — Added secure NuGet publishing with GitHub Actions and `NuGet/login`.
+1. **.NET 11 support**: Both packages now target .NET 8, .NET 10, and .NET 11.
+2. **Blazor Components package**: Added `ElBruno.Whisper.BlazorComponents` with model selector, file transcription panel, live transcript viewer, and transcription history list.
+3. **Real-time Blazor transcription sample**: Added chunk-based live transcription UX in the `BlazorWhisper` sample.
+4. **Timestamp-aware transcription results**: Added optional segment timestamps in `TranscriptionResult`.
+5. **Model download progress reporting**: Added structured progress callbacks during model download.
 
 ### Repository rule: keep last 5 important features
 
