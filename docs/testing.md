@@ -51,6 +51,25 @@ dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj --frame
 
 **CI/CD:** Typically excluded with `--filter "Category!=Integration"` to keep CI fast
 
+### Dependency Upgrade Compatibility
+
+The libraries retain `net8.0`, `net10.0`, and `net11.0` targets and the existing public API.
+
+- `Microsoft.Extensions.AI.Abstractions` 11.0.0 includes a supported .NET 8 asset. Existing adapter tests cover request options, response metadata, cancellation, stream ownership, and streaming responses.
+- Dependency injection and logging abstractions use 10.0.15 on .NET 8 and 11.0.0 on .NET 10/11. Version 11 of those packages does not support .NET 8; do not suppress framework support warnings to force it onto that target.
+- ONNX Runtime 1.22.1 retains the native platforms shipped with 1.22.0, including Windows x86 and Intel macOS. Version 1.32.0 was evaluated but is not selected because its package omits those two platforms.
+- `OnnxRuntime_RunsNativeCpuInference` executes a self-contained Identity model through the native CPU runtime without downloading Whisper weights. This checks native library loading and inference, not speech recognition accuracy.
+
+Run the unit suite, including native CPU inference, on every retained target:
+
+```bash
+dotnet test src/tests/ElBruno.Whisper.Tests/ElBruno.Whisper.Tests.csproj -c Release --filter "Category!=Integration"
+```
+
+For a quick coverage collector check, add `--collect:"XPlat Code Coverage"` and use `--filter "FullyQualifiedName~OnnxRuntime_RunsNativeCpuInference"` instead. Run coverage separately from other tests using the same output directory, because the collector instruments and restores assemblies in place.
+
+End-to-end speech recognition still requires the separate integration suite and its Whisper model download. A native CPU smoke test does not validate GPU providers, other operating systems or architectures, or real transcription.
+
 ### 3. Sample Applications
 
 **Location:** `src/samples/`

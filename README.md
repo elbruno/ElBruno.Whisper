@@ -5,7 +5,7 @@
 [![Build Status](https://github.com/elbruno/ElBruno.Whisper/actions/workflows/ci.yml/badge.svg)](https://github.com/elbruno/ElBruno.Whisper/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![HuggingFace](https://img.shields.io/badge/🤗_HuggingFace-ONNX_Models-orange?style=flat-square)](https://huggingface.co/elbruno)
-[![.NET](https://img.shields.io/badge/.NET-8.0%20|%2010.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-8.0%20|%2010.0%20|%2011.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
 [![GitHub stars](https://img.shields.io/github/stars/elbruno/ElBruno.Whisper?style=social)](https://github.com/elbruno/ElBruno.Whisper)
 [![Twitter Follow](https://img.shields.io/twitter/follow/elbruno?style=social)](https://twitter.com/elbruno)
 
@@ -347,7 +347,7 @@ For detailed troubleshooting, see [docs](docs/).
 
 ## What's New
 
-1. **.NET 11 support**: Both packages now target .NET 8, .NET 10, and .NET 11.
+1. **Updated dependencies with retained compatibility**: Microsoft.Extensions.AI 11 and ONNX Runtime 1.22.1, with .NET 8, .NET 10, and .NET 11 targets preserved. See the [dependency compatibility notes](docs/testing.md#dependency-upgrade-compatibility).
 2. **Blazor Components package**: Added `ElBruno.Whisper.BlazorComponents` with model selector, file transcription panel, live transcript viewer, and transcription history list.
 3. **Real-time Blazor transcription sample**: Added chunk-based live transcription UX in the `BlazorWhisper` sample.
 4. **Timestamp-aware transcription results**: Added optional segment timestamps in `TranscriptionResult`.
