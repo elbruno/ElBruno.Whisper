@@ -1,10 +1,29 @@
 using ElBruno.Whisper.Inference;
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 using Xunit;
 
 namespace ElBruno.Whisper.Tests.Inference;
 
 public class WhisperInferenceSessionTests
 {
+    [Fact]
+    public void OnnxRuntime_RunsNativeCpuInference()
+    {
+        // A self-contained ONNX Identity graph (float[1,2], opset 13) needs no model download.
+        var model = Convert.FromBase64String(
+            "CAg6XAoZCgVpbnB1dBIGb3V0cHV0IghJZGVudGl0eRIMbmF0aXZlLXNtb2tlWhcKBWlucHV0Eg4KDAgBEggKAggBCgIIAmIYCgZvdXRwdXQSDgoMCAESCAoCCAEKAggCQgIQDQ==");
+        using var session = new InferenceSession(model);
+        var input = new DenseTensor<float>(new[] { 1.25f, -2.5f }, new[] { 1, 2 });
+
+        using var results = session.Run(new[]
+        {
+            NamedOnnxValue.CreateFromTensor("input", input)
+        });
+
+        Assert.Equal(new[] { 1.25f, -2.5f }, Assert.Single(results).AsEnumerable<float>());
+    }
+
     [Fact]
     public void WhisperInferenceSession_ImplementsIDisposable()
     {
